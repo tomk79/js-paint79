@@ -1,0 +1,24 @@
+// ビルド成果物(dist/)のスモークテスト。npm run build の後に実行する
+import { expect, test } from '@playwright/test';
+import { BLACK, expectColor, pixel } from './helpers/paint';
+import { drawStroke } from './helpers/pointer';
+
+for (const [name, path] of [
+  ['ES Modules(dist/paint79.mjs)', '/e2e/pages/dist-esm.html'],
+  ['UMD(dist/paint79.js、グローバル変数 Paint79)', '/e2e/pages/dist-umd.html'],
+] as const) {
+  test(`${name} を読み込んで描画できる`, async ({ page }) => {
+    await page.goto(path);
+    await page.waitForFunction(() => window.__ready === true);
+    await drawStroke(page, [
+      [10, 50],
+      [90, 50],
+    ]);
+    expectColor(await pixel(page, 50, 50), BLACK);
+    const hasData = await page.evaluate(async () => {
+      const blob = await window.paint79.exportPNG();
+      return (window.paint79.constructor as typeof window.Paint79).hasData(blob);
+    });
+    expect(hasData).toBe(true);
+  });
+}

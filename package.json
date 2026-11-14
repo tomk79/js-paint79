@@ -1,0 +1,58 @@
+{
+  "name": "@tomk79/paint79",
+  "version": "0.1.0",
+  "description": "ブラウザ上に canvas を展開し、マウス・タッチ・ペンで絵を描く UI を提供するライブラリ。レイヤー情報を埋め込んだ PNG を保存形式とする。",
+  "keywords": [
+    "canvas",
+    "paint",
+    "drawing",
+    "pen",
+    "layer",
+    "png"
+  ],
+  "license": "MIT",
+  "author": "Tomoya Koyanagi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomk79/js-paint79.git"
+  },
+  "main": "./dist/paint79.js",
+  "module": "./dist/paint79.mjs",
+  "types": "./dist/paint79.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/paint79.d.ts",
+      "import": "./dist/paint79.mjs",
+      "require": "./dist/paint79.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite --open /demo/",
+    "build": "vite build && tsc -p tsconfig.build.json && node scripts/write-dts-entry.mjs",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

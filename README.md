@@ -135,6 +135,17 @@ Paint79 PNG を保存・表示するアプリケーションでは、**ファイ
 | [docs/examples.md](docs/examples.md) | 使用例 |
 | [AGENTS.md](AGENTS.md) | 開発ルール |
 
+## 開発
+
+```bash
+npm install
+npx playwright install   # E2E テスト用のブラウザエンジン(初回のみ)
+npm run dev              # デモページ(demo/)を開く
+npm run check            # lint・型チェック・ユニットテスト・ビルド・E2E テストをすべて実行
+```
+
+開発ルール(TDD、E2E テストの方針、データ形式の互換性の扱い等)は [AGENTS.md](AGENTS.md) を参照してください。
+
 ## 対応ブラウザ
 
 Pointer Events に対応したモダンブラウザ(Chrome, Edge, Firefox, Safari の最新版)を対象とします。

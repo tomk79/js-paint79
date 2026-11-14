@@ -33,7 +33,7 @@
 | --- | --- | --- |
 | `dist/paint79.mjs` | ES Modules | `import Paint79 from '@tomk79/paint79'` |
 | `dist/paint79.js` | UMD | `<script>` タグで読み込み、グローバル変数 `Paint79` として利用 |
-| `dist/paint79.d.ts` | 型定義 | TypeScript 利用者向け |
+| `dist/paint79.d.ts` | 型定義 | TypeScript 利用者向け(実体は `dist/types/` 以下) |
 
 ### 依存関係
 
@@ -63,7 +63,8 @@ e2e/
   *.spec.ts           E2E テスト
   helpers/            E2E 用ヘルパー(ストローク入力、ピクセル取得等)
   pages/              E2E テストで使用する HTML ページ
-demo/                 開発確認用のデモページ
+demo/                 開発確認用のデモページ(npm run dev で開く)
+scripts/              ビルド・フィクスチャ生成用のスクリプト
 dist/                 ビルド成果物(Git 管理外)
 ```
 
@@ -83,10 +84,11 @@ dist/                 ビルド成果物(Git 管理外)
 | `npm run dev` | デモページの開発サーバーを起動 |
 | `npm run build` | `dist/` にビルド |
 | `npm run lint` | ESLint と Prettier のチェック |
+| `npm run format` | Prettier で整形 |
 | `npm run typecheck` | 型チェック |
 | `npm test` | ユニットテストを実行 |
 | `npm run test:watch` | ユニットテストをウォッチモードで実行 |
-| `npm run test:e2e` | E2E テストを全ブラウザエンジンで実行 |
+| `npm run test:e2e` | ビルドしてから、E2E テストを全ブラウザエンジンとビルド成果物のスモークテスト(`dist` プロジェクト)で実行 |
 | `npm run test:e2e -- --project=chromium` | E2E テストを特定のブラウザエンジンで実行 |
 | `npm run check` | lint、型チェック、ユニットテスト、ビルド、E2E テストをすべて実行 |
 
@@ -159,6 +161,8 @@ Paint79 PNG は、memon 等の外部アプリケーションにファイルと�
 - `paNT` チャンクの構造、ヘッダーの JSON の意味を変更する場合は、docs/specs/file-format.md の仕様変更としてユーザーの合意を得てください。互換性のない変更には形式バージョンの更新が必要です
 - 新しいバージョンの Paint79 は、過去のすべての形式バージョンの Paint79 PNG を読み込めなければなりません
 - `test/fixtures/` には、各形式バージョンで書き出した Paint79 PNG を保存し、これを読み込むテストを維持します。**既存のフィクスチャを再生成・上書きしてはいけません**(互換性テストの意味がなくなるため)
+  - 形式バージョン 1 のフィクスチャは `scripts/generate-fixture-v1.mjs` で生成したものです。このスクリプトは、ファイルが既に存在する場合は何もしません
+  - 形式バージョンを上げた場合は、新しいバージョン用の生成スクリプトとフィクスチャを追加し、古いものは残してください
 - docs/specs/integration.md に記載した判定規則(非公開・コピー不可チャンクの判定)を満たし続けることを、ユニットテストで保証してください
 
 ## コーディング規約

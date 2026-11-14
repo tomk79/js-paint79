@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paint79 デモ</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 240px;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+      }
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 8px;
+        border-bottom: 1px solid #8884;
+      }
+      header label {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      #stage {
+        overflow: auto;
+        padding: 16px;
+        background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+      }
+      #paint-area {
+        width: 800px;
+        height: 600px;
+        box-shadow: 0 0 0 1px #8886;
+      }
+      aside {
+        border-left: 1px solid #8884;
+        padding: 8px;
+        overflow: auto;
+      }
+      #layer-list {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0;
+      }
+      #layer-list li {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        padding: 4px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #layer-list li.active {
+        background: #4a90e233;
+      }
+      #layer-list li span {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .layer-props {
+        display: grid;
+        gap: 6px;
+      }
+      #status {
+        font-size: 12px;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <button id="btn-pen">ペン</button>
+      <button id="btn-eraser">消しゴム</button>
+      <label>色 <input id="color" type="color" value="#000000" /></label>
+      <label>太さ <input id="width" type="range" min="1" max="50" value="4" /></label>
+      <button id="btn-undo" disabled>元に戻す</button>
+      <button id="btn-redo" disabled>やり直す</button>
+      <button id="btn-clear">クリア</button>
+      <button id="btn-save">保存(Paint79 PNG)</button>
+      <label>開く <input id="file-open" type="file" accept="image/*" /></label>
+      <label><input id="palm" type="checkbox" /> パームリジェクション</label>
+      <span id="status"></span>
+    </header>
+    <main id="stage">
+      <div id="paint-area"></div>
+    </main>
+    <aside>
+      <button id="btn-add-layer">レイヤーを追加</button>
+      <button id="btn-dup-layer">複製</button>
+      <button id="btn-merge">下に統合</button>
+      <button id="btn-remove-layer">削除</button>
+      <button id="btn-up">↑</button>
+      <button id="btn-down">↓</button>
+      <ul id="layer-list"></ul>
+      <div class="layer-props">
+        <label>名前 <input id="layer-name" type="text" /></label>
+        <label
+          >不透明度 <input id="layer-opacity" type="range" min="0" max="1" step="0.05"
+        /></label>
+        <label
+          >合成モード
+          <select id="layer-blend">
+            <option>normal</option>
+            <option>multiply</option>
+            <option>screen</option>
+            <option>overlay</option>
+            <option>darken</option>
+            <option>lighten</option>
+          </select>
+        </label>
+        <label><input id="layer-locked" type="checkbox" /> ロック</label>
+      </div>
+    </aside>
+
+    <script type="module">
+      import Paint79 from '/src/index.ts';
+
+      const $ = (id) => document.getElementById(id);
+      let paint79 = createPaint();
+
+      function createPaint(palmRejection = false) {
+        return new Paint79($('paint-area'), { palmRejection });
+      }
+
+      function bind() {
+        paint79.on('historychange', ({ canUndo, canRedo }) => {
+          $('btn-undo').disabled = !canUndo;
+          $('btn-redo').disabled = !canRedo;
+        });
+        paint79.on('layerchange', ({ layers, activeLayerId }) =>
+          renderLayers(layers, activeLayerId),
+        );
+        paint79.on('toolchange', ({ tool }) => {
+          $('btn-pen').style.fontWeight = tool === 'pen' ? 'bold' : '';
+          $('btn-eraser').style.fontWeight = tool === 'eraser' ? 'bold' : '';
+        });
+        renderLayers(paint79.getLayers(), paint79.getActiveLayerId());
+        // イベントは変化したときにしか発生しないので、現在の状態でボタンを初期化する
+        $('btn-undo').disabled = !paint79.canUndo();
+        $('btn-redo').disabled = !paint79.canRedo();
+      }
+      bind();
+
+      const active = () => paint79.getActiveLayerId();
+
+      $('btn-pen').onclick = () => paint79.setTool('pen');
+      $('btn-eraser').onclick = () => paint79.setTool('eraser');
+      $('color').oninput = (e) => paint79.setColor(e.target.value);
+      $('width').oninput = (e) => paint79.setLineWidth(Number(e.target.value));
+      $('btn-undo').onclick = () => paint79.undo();
+      $('btn-redo').onclick = () => paint79.redo();
+      $('btn-clear').onclick = () => paint79.clear();
+      $('palm').onchange = async (e) => {
+        // パームリジェクションはコンストラクタのオプションなので、作り直して内容を引き継ぐ
+        const blob = await paint79.exportPNG();
+        paint79.destroy();
+        paint79 = createPaint(e.target.checked);
+        bind();
+        await paint79.open(blob);
+      };
+
+      $('btn-save').onclick = async () => {
+        const blob = await paint79.exportPNG();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'paint79.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+
+      $('file-open').onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const result = await paint79.open(file);
+        $('status').textContent = result.restored
+          ? 'レイヤーを復元しました'
+          : `1 枚のレイヤーとして読み込みました(${result.reason})`;
+        e.target.value = '';
+      };
+
+      $('btn-add-layer').onclick = () => paint79.setActiveLayer(paint79.addLayer());
+      $('btn-dup-layer').onclick = () => paint79.setActiveLayer(paint79.duplicateLayer(active()));
+      $('btn-merge').onclick = () => paint79.mergeDown(active());
+      $('btn-remove-layer').onclick = () => paint79.removeLayer(active());
+      const move = (delta) => {
+        const layers = paint79.getLayers();
+        const index = layers.findIndex((l) => l.id === active()) + delta;
+        if (index >= 0 && index < layers.length) paint79.moveLayer(active(), index);
+      };
+      $('btn-up').onclick = () => move(1);
+      $('btn-down').onclick = () => move(-1);
+
+      $('layer-name').onchange = (e) =>
+        paint79.setLayerProperties(active(), { name: e.target.value });
+      $('layer-opacity').onchange = (e) =>
+        paint79.setLayerProperties(active(), { opacity: Number(e.target.value) });
+      $('layer-blend').onchange = (e) =>
+        paint79.setLayerProperties(active(), { blendMode: e.target.value });
+      $('layer-locked').onchange = (e) =>
+        paint79.setLayerProperties(active(), { locked: e.target.checked });
+
+      function renderLayers(layers, activeLayerId) {
+        const list = $('layer-list');
+        list.innerHTML = '';
+        // 前面のレイヤーを上に表示する
+        for (const layer of [...layers].reverse()) {
+          const li = document.createElement('li');
+          li.className = layer.id === activeLayerId ? 'active' : '';
+          const visible = document.createElement('input');
+          visible.type = 'checkbox';
+          visible.checked = layer.visible;
+          visible.title = '表示';
+          visible.onclick = (e) => e.stopPropagation();
+          visible.onchange = () =>
+            paint79.setLayerProperties(layer.id, { visible: visible.checked });
+          const name = document.createElement('span');
+          name.textContent = `${layer.name}${layer.locked ? ' 🔒' : ''}`;
+          li.append(visible, name);
+          li.onclick = () => paint79.setActiveLayer(layer.id);
+          list.appendChild(li);
+        }
+        const current = layers.find((l) => l.id === activeLayerId);
+        $('layer-name').value = current.name;
+        $('layer-opacity').value = current.opacity;
+        $('layer-blend').value = current.blendMode;
+        $('layer-locked').checked = current.locked;
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Paint79 dist (UMD)</title>
+  </head>
+  <body>
+    <div id="paint-area" style="width: 100px; height: 100px"></div>
+    <script src="/dist/paint79.js"></script>
+    <script>
+      window.paint79 = new Paint79(document.getElementById('paint-area'), { pixelRatio: 1 });
+      window.__ready = true;
+    </script>
+  </body>
+</html>
