@@ -35,6 +35,25 @@ test.describe('ストロークの履歴', () => {
     expectColor(await pixel(page, 50, 70), WHITE);
   });
 
+  test('筆圧で太さが変わるストロークも、アンドゥで描画が残らない', async ({ page }) => {
+    await setup(page, { width: 300, height: 200, lineWidth: 100 });
+    // 太さ 100 → 10 の線分は、終点の周りも平均の太さ 55 で描かれる
+    await drawStroke(
+      page,
+      [
+        [50, 100, 1],
+        [200, 100, 0.1],
+      ],
+      { pointerType: 'pen' },
+    );
+    expectColor(await pixel(page, 215, 100), BLACK);
+    await page.evaluate(() => window.paint79.undo());
+    expectColor(await pixel(page, 215, 100), WHITE);
+    expectColor(await pixel(page, 100, 100), WHITE);
+    await page.evaluate(() => window.paint79.redo());
+    expectColor(await pixel(page, 215, 100), BLACK);
+  });
+
   test('消しゴムのストロークもアンドゥできる', async ({ page }) => {
     await setup(page, { width: 100, height: 100, lineWidth: 20 });
     await line(page, 50);

@@ -18,6 +18,7 @@ import {
   type StrokePoint,
 } from './input/policy';
 import { History } from './model/History';
+import { exceedsOpenPixelLimit, MAX_OPEN_PIXELS } from './model/limits';
 import { LayerStack, toInfo, type Layer } from './model/LayerStack';
 import {
   normalizeOptions,
@@ -529,6 +530,7 @@ export default class Paint79 {
       background: this.#opts.background,
       activeLayerId: this.#layers.activeId,
     };
+    const layerProps = layers.map((l) => ({ id: l.id, ...pickProps(l) }));
     const compositeBlob = canvasToBlob(this.#committedComposite(layers), 'image/png');
     if (!embedData) return compositeBlob;
     const layerBlobs = layers.map((l) => canvasToBlob(l.surface, 'image/png'));
@@ -540,7 +542,7 @@ export default class Paint79 {
     ]);
     const png = embedPaint79Data(compositeBytes!, {
       ...header,
-      layers: layers.map((l, i) => ({ id: l.id, ...pickProps(l), image: images[i]! })),
+      layers: layerProps.map((props, i) => ({ ...props, image: images[i]! })),
     });
     return new Blob([png], { type: 'image/png' });
   }
@@ -806,10 +808,24 @@ export default class Paint79 {
   }
 
   /**
-   * 復元するレイヤーの canvas を作る。レイヤー画像をデコードできない場合は null(corrupted)。メモリの使用量を抑えるため、レイヤー画像は 1 枚ずつデコードする。
+   * 復元するレイヤーの canvas を作る。レイヤー画像をデコードできない場合は null(corrupted)。
+   * ピクセル数の合計が上限を超える場合は、デコードする前に Error を投げる。
+   * メモリの使用量を抑えるため、レイヤー画像は 1 枚ずつデコードする。
    */
   async #prepareLayers(data: Paint79Data): Promise<Surface[] | null> {
     const pr = this.#opts.pixelRatio;
+    if (
+      exceedsOpenPixelLimit({
+        width: data.width,
+        height: data.height,
+        pixelRatio: pr,
+        layers: data.layers.length,
+      })
+    ) {
+      throw new Error(
+        `レイヤーのピクセル数の合計が上限(${MAX_OPEN_PIXELS})を超えるため、読み込めません`,
+      );
+    }
     const pw = pixelSize(data.width, pr);
     const ph = pixelSize(data.height, pr);
     const surfaces: Surface[] = [];

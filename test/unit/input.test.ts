@@ -125,8 +125,9 @@ describe('strokeBounds', () => {
         pixelRatio: 2,
       },
     );
-    // x: 10-2-1=7 ～ 30+1+1=32 → 14 ～ 64、y: 20-2-1=17 ～ 25+1+1=27 → 34 ～ 54(余白 1px を含む)
-    expect(r).toEqual({ x: 14, y: 34, width: 50, height: 20 });
+    // 始点は自身の太さ 4 の点、線分は両端の平均の太さ 3 で描かれる(render/stroke.ts)。
+    // x: 10-2-1=7 ～ 30+1.5+1=32.5 → 14 ～ 65、y: 20-2-1=17 ～ 25+1.5+1=27.5 → 34 ～ 55(余白 1px を含む)
+    expect(r).toEqual({ x: 14, y: 34, width: 51, height: 21 });
   });
 
   test('キャンバスの範囲に切り詰める', () => {
@@ -140,6 +141,29 @@ describe('strokeBounds', () => {
 
   test('点がなければ null', () => {
     expect(strokeBounds([], { width: 10, height: 10, pixelRatio: 1 })).toBeNull();
+  });
+
+  test('筆圧で太さが変わる線分は、両端の平均の太さで描かれる範囲を含む', () => {
+    // 太さ 100 → 10 の線分は、終点の周りも平均の太さ 55(半径 27.5)で描かれる
+    const r = strokeBounds(
+      [
+        { x: 50, y: 100, width: 100 },
+        { x: 200, y: 100, width: 10 },
+      ],
+      { width: 300, height: 200, pixelRatio: 1 },
+    );
+    // x: 0 ～ 200+27.5+1=228.5 → 229、y: 100-50-1=49 ～ 100+50+1=151
+    expect(r).toEqual({ x: 0, y: 49, width: 229, height: 102 });
+  });
+
+  test('キャンバスのピクセルサイズには max(1, round(...)) の下限を適用する', () => {
+    // 0.2 x 1 = 0.2 は丸めると 0 だが、実際の canvas は 1 x 1
+    const r = strokeBounds([{ x: 0.1, y: 0.1, width: 4 }], {
+      width: 0.2,
+      height: 0.2,
+      pixelRatio: 1,
+    });
+    expect(r).toEqual({ x: 0, y: 0, width: 1, height: 1 });
   });
 });
 

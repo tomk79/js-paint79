@@ -1,5 +1,6 @@
 // ポインター入力に関する判断ロジック(DOM 非依存)
 // 仕様: docs/specs/api.md の「ポインター操作による描画」
+import { pixelSize } from '../format/paint79-chunk';
 import { POINTER_TYPES } from '../model/options';
 
 export interface StrokeWidthInput {
@@ -91,27 +92,37 @@ export interface PixelRect {
 
 /**
  * ストロークが描画されうる範囲を、内部解像度のピクセル単位で返す。
+ * 始点は自身の太さの点として、各線分は両端の平均の太さで描かれる(render/stroke.ts)ので、それに合わせて計算する。
  * アンチエイリアスの分として 1 CSS ピクセルの余白を含め、キャンバスの範囲に切り詰める。
  */
 export function strokeBounds(
   points: readonly StrokePoint[],
   canvas: { width: number; height: number; pixelRatio: number },
 ): PixelRect | null {
-  if (points.length === 0) return null;
+  const first = points[0];
+  if (!first) return null;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const p of points) {
-    const r = p.width / 2;
-    minX = Math.min(minX, p.x - r);
-    minY = Math.min(minY, p.y - r);
-    maxX = Math.max(maxX, p.x + r);
-    maxY = Math.max(maxY, p.y + r);
+  const include = (x: number, y: number, r: number) => {
+    minX = Math.min(minX, x - r);
+    minY = Math.min(minY, y - r);
+    maxX = Math.max(maxX, x + r);
+    maxY = Math.max(maxY, y + r);
+  };
+  include(first.x, first.y, first.width / 2);
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const r = (a.width + b.width) / 4; // 平均の太さの半分
+    include(a.x, a.y, r);
+    include(b.x, b.y, r);
   }
   const pr = canvas.pixelRatio;
-  const pw = Math.round(canvas.width * pr);
-  const ph = Math.round(canvas.height * pr);
+  // 実際の canvas と同じ計算でピクセルサイズを求める
+  const pw = pixelSize(canvas.width, pr);
+  const ph = pixelSize(canvas.height, pr);
   const clamp = (v: number, max: number) => Math.min(max, Math.max(0, v));
   const x0 = clamp(Math.floor((minX - 1) * pr), pw);
   const y0 = clamp(Math.floor((minY - 1) * pr), ph);

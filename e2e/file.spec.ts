@@ -132,6 +132,42 @@ test.describe('exportPNG', () => {
   });
 });
 
+test.describe('exportPNG(書き出す内容の確定)', () => {
+  test('Promise が解決する前にレイヤーの属性を変更しても、出力は呼び出した時点の状態', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await prepareHelpers(page);
+    await drawSampleAndExport(page);
+    const r = await page.evaluate(async () => {
+      const p = window.paint79;
+      const before = p.getLayers();
+      const saving = p.exportPNG();
+      // 保存の完了を待たずに、属性・背景色・アクティブレイヤーを変更する
+      for (const l of before) p.setLayerProperties(l.id, { visible: !l.visible, name: 'changed' });
+      p.setBackground('#000000');
+      p.setActiveLayer(before[0]!.id);
+      const blob = await saving;
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const other = new window.Paint79(div, { pixelRatio: 1 });
+      const result = await other.open(blob);
+      return {
+        result,
+        same: JSON.stringify(other.getLayers()) === JSON.stringify(before),
+        background: other.getBackground(),
+        active: other.getActiveLayerId() === before[1]!.id,
+      };
+    });
+    expect(r).toEqual({
+      result: { restored: true },
+      same: true,
+      background: '#ffff00',
+      active: true,
+    });
+  });
+});
+
 test.describe('open', () => {
   test('Paint79 PNG からレイヤー、属性、アクティブレイヤー、サイズ、背景色を復元する', async ({
     page,
@@ -445,6 +481,65 @@ test.describe('open(レビューで見つかった不具合の再発防止)', ()
 });
 
 test.describe('open(ブラウザ間の差異・上限)', () => {
+  test('復元するレイヤーのピクセル数の合計が上限を超える場合は、デコードする前に Error で、状態を変更しない', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await prepareHelpers(page);
+    await drawStroke(page, [
+      [0, 40],
+      [100, 40],
+    ]);
+    const r = await page.evaluate(async () => {
+      const png = window.__png;
+      const base = new Uint8Array(await (await window.__solidPng(10, 10, '#ff0000')).arrayBuffer());
+      // 保存時の pixelRatio を極端に小さくし、10 x 10 の画像で 10000 x 10000 のキャンバスを宣言する。
+      // 読み込み先(pixelRatio 1)では 1 億ピクセルのレイヤーが 3 枚(合計 3 億ピクセル)になる
+      const layers = [0, 1, 2].map((i) => ({
+        id: `l${i}`,
+        name: `l${i}`,
+        visible: true,
+        opacity: 1,
+        locked: false,
+        blendMode: 'normal',
+        offset: i * base.length,
+        length: base.length,
+      }));
+      const header = {
+        width: 10000,
+        height: 10000,
+        pixelRatio: 0.001,
+        background: '#ffffff',
+        activeLayerId: 'l0',
+        compositeChecksum: png.compositeChecksum(base),
+        layers,
+      };
+      const json = new TextEncoder().encode(JSON.stringify(header));
+      const data = new Uint8Array(16 + json.length + base.length * 3);
+      data.set(new TextEncoder().encode('paint79\0'));
+      new DataView(data.buffer).setUint32(8, 1);
+      new DataView(data.buffer).setUint32(12, json.length);
+      data.set(json, 16);
+      for (let i = 0; i < 3; i++) data.set(base, 16 + json.length + i * base.length);
+      const before = JSON.stringify(window.paint79.getLayers());
+      let name = 'no error';
+      try {
+        await window.paint79.open(png.insertChunkBeforeIEND(base, png.buildChunk('paNT', data)));
+      } catch (e) {
+        name = (e as Error).name;
+      }
+      const c = window.paint79.getCanvas();
+      return {
+        name,
+        same: JSON.stringify(window.paint79.getLayers()) === before,
+        size: [c.width, c.height],
+        canUndo: window.paint79.canUndo(),
+      };
+    });
+    expect(r).toEqual({ name: 'Error', same: true, size: [100, 80], canUndo: true });
+    expectColor(await pixel(page, 50, 40), BLACK);
+  });
+
   test('背景色をこのブラウザが解釈できなくても、レイヤーを復元し、背景色を null として読み込む', async ({
     page,
   }) => {
