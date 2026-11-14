@@ -145,3 +145,12 @@ describe('compositeChecksum', () => {
     expect(compositeChecksum(makePng({ rgba }))).not.toBe(compositeChecksum(makePng()));
   });
 });
+
+describe('hasUnsafeToCopyPrivateChunk(途中で切れたチャンク)', () => {
+  test('データが途中で切れていても、チャンク名が読めれば判定する(integration.md のアルゴリズムどおり)', () => {
+    const png = makePng({ after: [chunk('paNT', bytes('0123456789'))] });
+    const paNT = readChunks(png).find((c) => c.type === 'paNT')!;
+    // paNT のデータの途中で切る
+    expect(hasUnsafeToCopyPrivateChunk(png.subarray(0, paNT.offset + 12))).toBe(true);
+  });
+});

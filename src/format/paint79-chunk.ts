@@ -6,6 +6,7 @@ import {
   insertChunkBeforeIEND,
   isPng,
   readChunks,
+  readImageSize,
   type PngChunk,
 } from './png';
 
@@ -144,11 +145,28 @@ const isPositive = (v: unknown): v is number =>
 const isNonNegativeInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
 
 /** ヘッダーを検証して Paint79Data を組み立てる。不正な場合は CorruptedError を投げる。 */
-function parseHeader(header: unknown, area: Uint8Array): Paint79Data & { checksum: string } {
+/** 完成イメージ・レイヤー画像のピクセルサイズ(docs/specs/file-format.md) */
+export function pixelSize(cssSize: number, pixelRatio: number): number {
+  return Math.max(1, Math.round(cssSize * pixelRatio));
+}
+
+function parseHeader(
+  header: unknown,
+  area: Uint8Array,
+  composite: { width: number; height: number },
+): Paint79Data & { checksum: string } {
   if (!isObject(header)) fail();
   const { width, height, pixelRatio, background, activeLayerId } = header;
   if (!isPositive(width) || !isPositive(height) || !isPositive(pixelRatio)) fail();
-  if (background !== null && typeof background !== 'string') fail();
+  if (background !== null && (typeof background !== 'string' || background === '')) fail();
+  // ヘッダーのサイズが実際の画像と一致することを、デコードの前に IHDR だけで確認する。
+  // 実際と異なる巨大なサイズによって、過大なメモリを確保することを防ぐため。
+  if (
+    pixelSize(width, pixelRatio) !== composite.width ||
+    pixelSize(height, pixelRatio) !== composite.height
+  ) {
+    fail();
+  }
   if (typeof header.compositeChecksum !== 'string') fail();
   if (!Array.isArray(header.layers) || header.layers.length === 0) fail();
 
@@ -164,6 +182,9 @@ function parseHeader(header: unknown, area: Uint8Array): Paint79Data & { checksu
     if (!BLEND_MODES.includes(blendMode as BlendMode)) fail();
     if (!isNonNegativeInt(offset) || !isNonNegativeInt(length)) fail();
     if (offset + length > area.length) fail();
+    const image = area.subarray(offset, offset + length);
+    const size = readImageSize(image);
+    if (!size || size.width !== composite.width || size.height !== composite.height) fail();
     return {
       id,
       name,
@@ -171,7 +192,7 @@ function parseHeader(header: unknown, area: Uint8Array): Paint79Data & { checksu
       opacity,
       locked,
       blendMode: blendMode as BlendMode,
-      image: area.subarray(offset, offset + length),
+      image,
     };
   });
 
@@ -214,7 +235,9 @@ export function extractPaint79Data(
     const json = new TextDecoder('utf-8', { fatal: true }).decode(
       d.subarray(FIXED_HEADER_SIZE, FIXED_HEADER_SIZE + headerLength),
     );
-    parsed = parseHeader(JSON.parse(json), d.subarray(FIXED_HEADER_SIZE + headerLength));
+    const composite = readImageSize(png);
+    if (!composite) fail();
+    parsed = parseHeader(JSON.parse(json), d.subarray(FIXED_HEADER_SIZE + headerLength), composite);
   } catch {
     // JSON の構文エラー、UTF-8 として不正なバイト列、ヘッダーの検証エラーのいずれも「壊れている」とみなす
     return { status: 'corrupted' };

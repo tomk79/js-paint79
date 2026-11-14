@@ -8,6 +8,10 @@ export interface PointerOptions {
   pointerType?: PointerKind;
   pointerId?: number;
   pressure?: number;
+  /** PointerEvent.button(省略時は pointerdown / pointerup で 0、それ以外で -1) */
+  button?: number;
+  /** PointerEvent.buttons(省略時は pointerdown / pointermove で 1、それ以外で 0) */
+  buttons?: number;
 }
 
 export interface StrokeOptions extends PointerOptions {
@@ -29,6 +33,8 @@ interface RawEvent {
   pressure: number;
   pointerType: PointerKind;
   pointerId: number;
+  button?: number | undefined;
+  buttons?: number | undefined;
 }
 
 /** 合成した PointerEvent を、表示用 canvas に順に送出する */
@@ -48,8 +54,8 @@ async function dispatch(page: Page, events: RawEvent[]): Promise<void> {
           clientX: rect.left + e.x,
           clientY: rect.top + e.y,
           pressure: e.pressure,
-          button: e.type === 'pointerdown' || e.type === 'pointerup' ? 0 : -1,
-          buttons: e.type === 'pointerdown' || e.type === 'pointermove' ? 1 : 0,
+          button: e.button ?? (e.type === 'pointerdown' || e.type === 'pointerup' ? 0 : -1),
+          buttons: e.buttons ?? (e.type === 'pointerdown' || e.type === 'pointermove' ? 1 : 0),
         }),
       );
     }
@@ -71,7 +77,18 @@ export async function sendPointer(
 ): Promise<void> {
   const { pointerType, pointerId } = resolve(options);
   const pressure = point[2] ?? options.pressure ?? (type === 'pointerup' ? 0 : 0.5);
-  await dispatch(page, [{ type, x: point[0], y: point[1], pressure, pointerType, pointerId }]);
+  await dispatch(page, [
+    {
+      type,
+      x: point[0],
+      y: point[1],
+      pressure,
+      pointerType,
+      pointerId,
+      button: options.button,
+      buttons: options.buttons,
+    },
+  ]);
 }
 
 /** キャンバス上の CSS ピクセル座標の列に沿って、ストロークを描く */
@@ -89,6 +106,7 @@ export async function drawStroke(
     pressure: pressureOf(p),
     pointerType,
     pointerId,
+    button: i === 0 ? options.button : undefined,
   }));
   if (!options.keepDown) {
     const last = points[points.length - 1]!;

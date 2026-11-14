@@ -360,6 +360,133 @@ test.describe('open', () => {
   });
 });
 
+test.describe('open(レビューで見つかった不具合の再発防止)', () => {
+  test('現在のキャンバスより大きい通常の画像を開くと、画像全体を読み込む', async ({ page }) => {
+    await setup(page, { width: 50, height: 50 });
+    await prepareHelpers(page);
+    await page.evaluate(async () => {
+      await window.paint79.open(await window.__solidPng(200, 100, '#ff0000'));
+    });
+    expectColor(await pixel(page, 190, 90), RED);
+    // 読み込み後、読み込んだ範囲の全体に描画できる
+    await drawStroke(page, [
+      [150, 50],
+      [195, 50],
+    ]);
+    expectColor(await pixel(page, 170, 50), BLACK);
+  });
+
+  test('通常の画像を開いた後に書き出した Paint79 PNG は、レイヤー画像のサイズが完成イメージと一致する', async ({
+    page,
+  }) => {
+    await setup(page, { width: 200, height: 200 });
+    await prepareHelpers(page);
+    const r = await page.evaluate(async () => {
+      await window.paint79.open(await window.__solidPng(20, 10, '#ff0000'));
+      const blob = await window.paint79.exportPNG();
+      const other = new window.Paint79(document.createElement('div'), { pixelRatio: 1 });
+      return other.open(blob);
+    });
+    expect(r).toEqual({ restored: true });
+  });
+
+  test('デコードできないレイヤー画像を含む場合は corrupted で、完成イメージを読み込む', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await prepareHelpers(page);
+    const r = await page.evaluate(async () => {
+      const png = window.__png;
+      const base = new Uint8Array(await (await window.__solidPng(10, 10, '#ff0000')).arrayBuffer());
+      const ihdr = png.readChunks(base).find((c) => c.type === 'IHDR')!;
+      // サイズは完成イメージと同じだが、ビット深度が PNG の仕様上ありえない値(3)のレイヤー画像。
+      // 画素データが壊れているだけの PNG は、ブラウザによっては空の画像としてデコードされるため、
+      // どのブラウザでも確実にデコードに失敗するデータを使う
+      const brokenIhdr = new Uint8Array(ihdr.data);
+      brokenIhdr[8] = 3;
+      const broken = new Uint8Array([
+        ...base.subarray(0, 8),
+        ...png.buildChunk('IHDR', brokenIhdr),
+        ...png.buildChunk('IDAT', new Uint8Array([1, 2, 3, 4, 5])),
+        ...png.buildChunk('IEND', new Uint8Array()),
+      ]);
+      const header = {
+        width: 10,
+        height: 10,
+        pixelRatio: 1,
+        background: '#ffffff',
+        activeLayerId: 'a',
+        compositeChecksum: png.compositeChecksum(base),
+        layers: [
+          {
+            id: 'a',
+            name: 'a',
+            visible: true,
+            opacity: 1,
+            locked: false,
+            blendMode: 'normal',
+            offset: 0,
+            length: broken.length,
+          },
+        ],
+      };
+      const json = new TextEncoder().encode(JSON.stringify(header));
+      const data = new Uint8Array(16 + json.length + broken.length);
+      data.set(new TextEncoder().encode('paint79\0'));
+      new DataView(data.buffer).setUint32(8, 1);
+      new DataView(data.buffer).setUint32(12, json.length);
+      data.set(json, 16);
+      data.set(broken, 16 + json.length);
+      return window.paint79.open(png.insertChunkBeforeIEND(base, png.buildChunk('paNT', data)));
+    });
+    expect(r).toEqual({ restored: false, reason: 'corrupted' });
+    expectColor(await pixel(page, 5, 5), RED);
+  });
+});
+
+test.describe('loadImage(汚染された画像)', () => {
+  test('別オリジンの画像を CORS の許可なしに読み込んだ場合は Error で、状態を変更しない', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await drawStroke(page, [
+      [0, 40],
+      [100, 40],
+    ]);
+    const r = await page.evaluate(async () => {
+      // localhost で開いたページから見て、127.0.0.1 は別オリジン
+      const img = new Image();
+      img.src = `http://127.0.0.1:${location.port}/test/fixtures/paint79-v1.png`;
+      await img.decode();
+      const layers = window.paint79.getLayers().length;
+      const errors: string[] = [];
+      for (const options of [{ layerId: window.paint79.getActiveLayerId() }, undefined]) {
+        try {
+          await window.paint79.loadImage(img, options);
+          errors.push('no error');
+        } catch (e) {
+          errors.push((e as Error).name);
+        }
+      }
+      // 汚染されていなければ、書き出しができる
+      const blob = await window.paint79.exportPNG();
+      return {
+        errors,
+        sameLayers: window.paint79.getLayers().length === layers,
+        exported: blob.size > 0,
+        dataUrl: window.paint79.toDataURL().startsWith('data:image/png'),
+      };
+    });
+    expect(r).toEqual({
+      errors: ['Error', 'Error'],
+      sameLayers: true,
+      exported: true,
+      dataUrl: true,
+    });
+    expectColor(await pixel(page, 50, 40), BLACK);
+  });
+});
+
 test.describe('Paint79.hasData', () => {
   test('通常の PNG や PNG 以外のデータは false', async ({ page }) => {
     await setup(page);

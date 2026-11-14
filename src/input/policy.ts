@@ -24,8 +24,11 @@ export interface PointerDownContext {
   penDetected: boolean;
   /** アクティブレイヤーに描画できるか(ロックされておらず、表示されている) */
   layerDrawable: boolean;
+  pointerId: number;
   /** 描画中のストロークのポインターの種類。描画中でなければ null */
   activeStrokePointerType: string | null;
+  /** 描画中のストロークのポインター ID。描画中でなければ null */
+  activeStrokePointerId: number | null;
 }
 
 /**
@@ -34,7 +37,11 @@ export interface PointerDownContext {
  * - 'ignore': 無視する
  * - 'replace': 描画中のストロークを取り消し、このポインターでストロークを開始する
  */
-export function decidePointerDown(c: PointerDownContext): 'start' | 'ignore' | 'replace' {
+export function decidePointerDown(
+  c: PointerDownContext,
+): 'start' | 'ignore' | 'replace' | 'restart' {
+  // 描画中のポインターと同じ ID の pointerdown は、pointerup を取りこぼしたものとみなす
+  if (c.activeStrokePointerId !== null && c.pointerId === c.activeStrokePointerId) return 'restart';
   if (c.readOnly) return 'ignore';
   if (!(POINTER_TYPES as readonly string[]).includes(c.pointerType)) return 'ignore';
   if (!c.pointerTypes.includes(c.pointerType)) return 'ignore';
@@ -111,4 +118,21 @@ export function strokeBounds(
   const x1 = clamp(Math.ceil((maxX + 1) * pr), pw);
   const y1 = clamp(Math.ceil((maxY + 1) * pr), ph);
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
+export interface PointerMoveContext {
+  /** 描画中のストロークのポインターか */
+  isStrokePointer: boolean;
+  pointerType: string;
+  buttons: number;
+}
+
+/**
+ * pointermove を受けたときの動作を決める。
+ * マウスのボタンがすべて離されている場合は、pointerup を取りこぼしたものとしてストロークを確定する。
+ */
+export function decidePointerMove(c: PointerMoveContext): 'extend' | 'finish' | 'ignore' {
+  if (!c.isStrokePointer) return 'ignore';
+  if (c.pointerType === 'mouse' && c.buttons === 0) return 'finish';
+  return 'extend';
 }

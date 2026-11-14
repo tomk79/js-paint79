@@ -82,6 +82,18 @@ export function insertChunkBeforeIEND(png: Uint8Array, chunk: Uint8Array): Uint8
   return out;
 }
 
+/**
+ * IHDR チャンクから画像のピクセルサイズを読む。画像のデコードは行わない。
+ * PNG でない、または先頭のチャンクが正しい IHDR でない場合は null。
+ */
+export function readImageSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (!isPng(bytes)) return null;
+  const first = iterateChunks(bytes).next();
+  if (first.done || first.value.type !== 'IHDR' || first.value.data.length !== 13) return null;
+  const v = view(first.value.data);
+  return { width: v.getUint32(0), height: v.getUint32(4) };
+}
+
 const isLower = (c: number) => c >= 0x61 && c <= 0x7a;
 const isUpper = (c: number) => c >= 0x41 && c <= 0x5a;
 
@@ -91,10 +103,14 @@ const isUpper = (c: number) => c >= 0x41 && c <= 0x5a;
  */
 export function hasUnsafeToCopyPrivateChunk(bytes: Uint8Array): boolean {
   if (!isPng(bytes)) return false;
-  for (const c of iterateChunks(bytes)) {
-    const t1 = c.type.charCodeAt(1);
-    const t3 = c.type.charCodeAt(3);
-    if (isLower(t1) && isUpper(t3)) return true;
+  // integration.md の判定アルゴリズムと同じく、データ長を確認する前にチャンク名で判定する
+  const v = view(bytes);
+  let pos = PNG_SIGNATURE.length;
+  while (pos + 8 <= bytes.length) {
+    const length = v.getUint32(pos);
+    if (isLower(bytes[pos + 5]!) && isUpper(bytes[pos + 7]!)) return true;
+    if (typeAt(bytes, pos + 4) === 'IEND') return false;
+    pos += 12 + length;
   }
   return false;
 }

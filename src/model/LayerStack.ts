@@ -17,8 +17,10 @@ export class LayerStack<S> {
   private activeLayerId = '';
   /** 名前の通し番号('レイヤー N' の N)として最後に使った値 */
   private nameCounter = 0;
-  /** ID の通し番号。インスタンス内で単調増加させ、削除したレイヤーの ID を再利用しない */
+  /** ID の通し番号 */
   private idCounter = 0;
+  /** これまでに発行・使用したすべての ID。削除したレイヤーや読み込んだレイヤーの ID を再び発行しないため */
+  private readonly usedIds = new Set<string>();
 
   get layers(): readonly Layer<S>[] {
     return this.list;
@@ -35,8 +37,10 @@ export class LayerStack<S> {
   /** レイヤーを作る(挿入はしない)。名前を省略した場合は通し番号の名前を付ける */
   create(surface: S, props: Partial<LayerProps> = {}, id?: string): Layer<S> {
     this.nameCounter++;
+    const layerId = id ?? this.newId();
+    this.usedIds.add(layerId);
     return {
-      id: id ?? this.newId(),
+      id: layerId,
       surface,
       name: props.name ?? `レイヤー ${this.nameCounter}`,
       visible: props.visible ?? true,
@@ -50,7 +54,7 @@ export class LayerStack<S> {
     let id: string;
     do {
       id = `layer-${++this.idCounter}`;
-    } while (this.get(id));
+    } while (this.usedIds.has(id));
     return id;
   }
 

@@ -251,3 +251,31 @@ test.describe('destroy', () => {
     expect(changed).toBe(0);
   });
 });
+
+test.describe('色の検証', () => {
+  test('CSS カラーとして解釈できない色は RangeError で、値を変更しない', async ({ page }) => {
+    await setup(page);
+    const r = await page.evaluate(() => {
+      const names: string[] = [];
+      const run = (fn: () => void) => {
+        try {
+          fn();
+          names.push('no error');
+        } catch (e) {
+          names.push((e as Error).name);
+        }
+      };
+      run(() => window.paint79.setColor('not-a-color'));
+      run(() => window.paint79.setBackground('not-a-color'));
+      run(() => new window.Paint79(document.getElementById('paint-area')!, { color: 'nope' }));
+      run(() => new window.Paint79(document.getElementById('paint-area')!, { background: 'nope' }));
+      run(() => window.paint79.setColor('rgb(10, 20, 30)'));
+      run(() => window.paint79.setBackground('transparent'));
+      return { names, color: window.paint79.getColor() };
+    });
+    expect(r).toEqual({
+      names: ['RangeError', 'RangeError', 'RangeError', 'RangeError', 'no error', 'no error'],
+      color: 'rgb(10, 20, 30)',
+    });
+  });
+});

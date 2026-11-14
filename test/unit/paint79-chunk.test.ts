@@ -15,10 +15,14 @@ import { chunk, makePng } from '../helpers/png';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
+/**
+ * 完成イメージ makePng()(2 x 2)と整合するサンプル。
+ * width 1 x pixelRatio 2 = 2 ピクセルで、各レイヤー画像も 2 x 2。
+ */
 function sampleData(): Paint79Data {
   return {
-    width: 800,
-    height: 600,
+    width: 1,
+    height: 1,
     pixelRatio: 2,
     background: '#ffffff',
     activeLayerId: 'layer-2',
@@ -30,7 +34,7 @@ function sampleData(): Paint79Data {
         opacity: 1,
         locked: false,
         blendMode: 'normal',
-        image: makePng({ width: 1, height: 1 }),
+        image: makePng(),
       },
       {
         id: 'layer-2',
@@ -39,7 +43,7 @@ function sampleData(): Paint79Data {
         opacity: 0.8,
         locked: true,
         blendMode: 'multiply',
-        image: makePng({ width: 3, height: 1 }),
+        image: makePng({ rgba: new Uint8Array(16).fill(255) }),
       },
     ],
   };
@@ -88,8 +92,8 @@ describe('embedPaint79Data', () => {
     const header = JSON.parse(new TextDecoder().decode(d.subarray(16, 16 + headerLength)));
 
     expect(header).toEqual({
-      width: 800,
-      height: 600,
+      width: 1,
+      height: 1,
       pixelRatio: 2,
       background: '#ffffff',
       activeLayerId: 'layer-2',
@@ -185,10 +189,11 @@ describe('extractPaint79Data', () => {
     expect(extractPaint79Data(makePng({ after: [c] }))).toEqual({ status: 'corrupted' });
   });
 
-  test('ヘッダーの項目の型が誤っていれば corrupted', () => {
+  test('ヘッダーの項目の型・値が誤っていれば corrupted', () => {
+    const layerPng = makePng();
     const base = {
-      width: 1,
-      height: 1,
+      width: 2,
+      height: 2,
       pixelRatio: 1,
       background: null,
       activeLayerId: 'a',
@@ -202,24 +207,77 @@ describe('extractPaint79Data', () => {
           locked: false,
           blendMode: 'normal',
           offset: 0,
-          length: 0,
+          length: layerPng.length,
         },
       ],
     };
+    const open = (header: unknown) =>
+      extractPaint79Data(
+        makePng({ after: [buildChunk('paNT', rawPaintChunk(1, header, layerPng))] }),
+      );
+    // 基準のヘッダーは正しく復元できる(以下の corrupted が、変更した項目によるものであることの確認)
+    expect(open(base).status).toBe('restored');
+
     const variants: unknown[] = [
-      { ...base, width: '1' },
+      { ...base, width: '2' },
       { ...base, width: 0 },
       { ...base, background: 1 },
+      { ...base, background: '' },
       { ...base, layers: [] },
       { ...base, layers: [{ ...base.layers[0], opacity: 2 }] },
       { ...base, layers: [{ ...base.layers[0], blendMode: 'unknown' }] },
       { ...base, layers: [{ ...base.layers[0], visible: 'yes' }] },
+      { ...base, layers: [{ ...base.layers[0], id: '' }] },
       { ...base, layers: [base.layers[0], base.layers[0]] }, // ID の重複
     ];
     for (const header of variants) {
-      const c = buildChunk('paNT', rawPaintChunk(1, header));
-      expect(extractPaint79Data(makePng({ after: [c] }))).toEqual({ status: 'corrupted' });
+      expect(open(header), JSON.stringify(header)).toEqual({ status: 'corrupted' });
     }
+  });
+
+  test('完成イメージのピクセルサイズが max(1, round(width x pixelRatio)) と一致しなければ corrupted', () => {
+    // ヘッダーは 1 x 1 x pixelRatio 2 = 2 x 2 を宣言している
+    expect(
+      extractPaint79Data(embedPaint79Data(makePng({ width: 3, height: 2 }), sampleData())),
+    ).toEqual({
+      status: 'corrupted',
+    });
+    // 巨大なサイズを宣言していても、画像の実際のサイズと一致しなければ読み込まない
+    const huge = { ...sampleData(), width: 100000, height: 100000 };
+    expect(extractPaint79Data(embedPaint79Data(makePng(), huge))).toEqual({ status: 'corrupted' });
+  });
+
+  test('round と max(1, ...) でピクセルサイズを計算する', () => {
+    const fractional = { ...sampleData(), width: 0.75, height: 1.25, pixelRatio: 2 }; // 1.5 → 2、2.5 → 3
+    const layers = fractional.layers.map((l) => ({
+      ...l,
+      image: makePng({ width: 2, height: 3 }),
+    }));
+    expect(
+      extractPaint79Data(
+        embedPaint79Data(makePng({ width: 2, height: 3 }), { ...fractional, layers }),
+      ).status,
+    ).toBe('restored');
+    const tiny = { ...sampleData(), width: 0.1, height: 0.1, pixelRatio: 1 };
+    const tinyLayers = tiny.layers.map((l) => ({ ...l, image: makePng({ width: 1, height: 1 }) }));
+    expect(
+      extractPaint79Data(
+        embedPaint79Data(makePng({ width: 1, height: 1 }), { ...tiny, layers: tinyLayers }),
+      ).status,
+    ).toBe('restored');
+  });
+
+  test('レイヤー画像が PNG でない、またはサイズが完成イメージと一致しなければ corrupted', () => {
+    const notPng = sampleData();
+    notPng.layers[0]!.image = enc('not a png');
+    expect(extractPaint79Data(embedPaint79Data(makePng(), notPng))).toEqual({
+      status: 'corrupted',
+    });
+    const wrongSize = sampleData();
+    wrongSize.layers[1]!.image = makePng({ width: 4, height: 4 });
+    expect(extractPaint79Data(embedPaint79Data(makePng(), wrongSize))).toEqual({
+      status: 'corrupted',
+    });
   });
 
   test('activeLayerId が存在しないレイヤーを指す場合は、最前面のレイヤーをアクティブにする', () => {

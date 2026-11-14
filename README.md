@@ -41,6 +41,8 @@ import Paint79 from '@tomk79/paint79';
 <div id="paint-area"></div>
 
 <script type="module">
+  import Paint79 from '@tomk79/paint79';
+
   const paint79 = new Paint79(document.getElementById('paint-area'), {
     width: 800,
     height: 600,

@@ -121,3 +121,23 @@ describe('LayerStack.setOrder', () => {
     expect(stack.create('c').name).toBe('レイヤー 3');
   });
 });
+
+describe('レイヤー ID の一意性', () => {
+  test('ID を指定して作ったレイヤー(読み込んだレイヤー)の ID を、後から発行しない', () => {
+    const { stack } = setup();
+    const restored = stack.create('r', {}, 'layer-2');
+    stack.insert(restored, 1);
+    stack.remove(restored.id);
+    const ids = [stack.create('a').id, stack.create('b').id, stack.create('c').id];
+    expect(ids).not.toContain('layer-2');
+  });
+
+  test('削除したレイヤーの ID を再び発行しない', () => {
+    const { stack, first } = setup();
+    const b = stack.create('b');
+    stack.insert(b, 1);
+    stack.remove(b.id);
+    expect([stack.create('c').id, stack.create('d').id]).not.toContain(b.id);
+    expect(stack.create('e').id).not.toBe(first.id);
+  });
+});

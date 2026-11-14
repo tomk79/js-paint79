@@ -27,7 +27,7 @@ paNT       ── Paint79 のレイヤー情報(1 つ)
 IEND
 ```
 
-- 完成イメージは、背景色と表示中(`visible: true`)の全レイヤーを統合した画像です。ピクセルサイズは `round(width × pixelRatio)` × `round(height × pixelRatio)` です
+- 完成イメージは、背景色と表示中(`visible: true`)の全レイヤーを統合した画像です。ピクセルサイズは `max(1, round(width × pixelRatio))` × `max(1, round(height × pixelRatio))` です
 - `paNT` チャンクは 1 つのファイルに 1 つだけ存在し、最後の `IDAT` の後、`IEND` の前に配置されます。ただし読み込み時は、位置にかかわらず検出してください
 - チャンクのデータ長の上限(2<sup>31</sup> − 1 バイト)を超える場合、`exportPNG()` はエラーになります
 
@@ -115,8 +115,13 @@ IEND
    - ヘッダーが UTF-8 の JSON として解析できない
    - ヘッダーの項目が上表の型・値の範囲を満たさない(`width` / `height` / `pixelRatio` が正の数でない、`layers` が空、レイヤー ID が空または重複している、`opacity` が `0`〜`1` の範囲外、`blendMode` が未知の値 など)
    - レイヤーの `offset` / `length` がデータ領域の範囲外
+   - 背景色 `background` が空文字列である
+   - 完成イメージのピクセルサイズ(`IHDR` の幅・高さ)が、`max(1, round(width × pixelRatio))` × `max(1, round(height × pixelRatio))` と一致しない
+   - いずれかのレイヤー画像が PNG でない、またはそのピクセルサイズ(`IHDR` の幅・高さ)が完成イメージと一致しない
 4. `compositeChecksum` が現在の `IHDR` / `IDAT` から計算した値と一致しない → `'image-modified'`(`ignoreMismatch: true` の場合は検証を省略)
-5. いずれかのレイヤー画像を PNG としてデコードできない → `'corrupted'`
+5. いずれかのレイヤー画像をデコードできない、または背景色をブラウザが CSS カラーとして解釈できない → `'corrupted'`
+
+サイズの整合性はデコードの前に `IHDR` だけで検証します。これにより、ヘッダーに実際の画像と異なる巨大なサイズを記載したファイルによって、過大なメモリを確保することを防ぎます。各レイヤー画像は、保存時と同じ色の値を復元するため、色空間の変換を行わずにデコードします。
 
 `activeLayerId` が存在しないレイヤーを指している場合は、壊れているとはみなさず、最前面のレイヤーをアクティブレイヤーとして復元します。
 

@@ -36,8 +36,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/e2e/pages/index.html`,
+    // 127.0.0.1 で待ち受ける。テストのページは localhost で開くため、127.0.0.1 からの読み込みを
+    // 別オリジンとして扱える(汚染された画像のテストで使う)
+    command: `npx vite --port ${PORT} --strictPort --host 127.0.0.1`,
+    url: `http://127.0.0.1:${PORT}/e2e/pages/index.html`,
     reuseExistingServer: false,
   },
 });

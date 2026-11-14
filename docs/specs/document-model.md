@@ -9,7 +9,7 @@ Paint79 が扱うデータの構造と、各仕様で共通して使う用語を
 | 要素 | 説明 |
 | --- | --- |
 | キャンバスサイズ | `width`, `height`(CSS ピクセル) |
-| 内部解像度の倍率 | `pixelRatio`。canvas およびレイヤー画像の実ピクセルサイズは `round(width × pixelRatio)` × `round(height × pixelRatio)` |
+| 内部解像度の倍率 | `pixelRatio`。canvas およびレイヤー画像の実ピクセルサイズは `max(1, round(width × pixelRatio))` × `max(1, round(height × pixelRatio))` |
 | 背景色 | `background`。すべてのレイヤーの下に敷かれる単色。`null` の場合は透明。背景色はレイヤーではない |
 | レイヤーの配列 | 配列の先頭(インデックス `0`)が最背面、末尾が最前面 |
 | アクティブレイヤー | ペンや消しゴムの描画対象となるレイヤー。常にいずれか 1 枚のレイヤーを指す |

@@ -1,9 +1,16 @@
 // Paint79 の公開クラス。各モジュールを組み合わせる薄い層に保つ。
 // 仕様: docs/specs/api.md
 import { Emitter } from './events/Emitter';
-import { embedPaint79Data, extractPaint79Data, hasPaint79Data } from './format/paint79-chunk';
+import {
+  embedPaint79Data,
+  extractPaint79Data,
+  hasPaint79Data,
+  pixelSize,
+  type Paint79Data,
+} from './format/paint79-chunk';
 import {
   decidePointerDown,
+  decidePointerMove,
   strokeBounds,
   strokeWidth,
   toCanvasPoint,
@@ -26,6 +33,7 @@ import {
   type PointerType,
   type ResolvedOptions,
 } from './model/options';
+import { assertCssColor, isCssColor } from './render/color';
 import { drawDot, drawSegment, type StrokeStyle } from './render/stroke';
 import {
   canvasToBlob,
@@ -110,11 +118,17 @@ async function toBytes(source: unknown): Promise<Uint8Array> {
   throw new TypeError(SOURCE_TYPE_ERROR);
 }
 
-async function decodeImage(bytes: Uint8Array): Promise<ImageBitmap> {
+/**
+ * 画像をデコードする。
+ * raw が true の場合は色空間の変換を行わない(paNT のレイヤー画像を、保存時と同じ色の値で復元するため)。
+ * 外部の画像は、埋め込まれた ICC プロファイル等をブラウザの既定の方法で解釈する。
+ */
+async function decodeImage(bytes: Uint8Array, raw = false): Promise<ImageBitmap> {
   try {
-    return await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>]), {
-      colorSpaceConversion: 'none',
-    });
+    const blob = new Blob([bytes as Uint8Array<ArrayBuffer>]);
+    return await (raw
+      ? createImageBitmap(blob, { colorSpaceConversion: 'none' })
+      : createImageBitmap(blob));
   } catch (e) {
     throw new Error('画像をデコードできません', { cause: e });
   }
@@ -135,6 +149,41 @@ async function toDrawable(source: LoadImageSource): Promise<Drawable> {
     return source;
   }
   return decodeImage(await toBytes(source));
+}
+
+/**
+ * 描画すると canvas が汚染される(ピクセルを読み出せなくなる)画像かどうか。
+ * CORS の許可なしに読み込まれた別オリジンの画像などが該当する。
+ */
+function taintsCanvas(image: Drawable): boolean {
+  const probe = createSurface(1, 1);
+  const ctx = context(probe);
+  ctx.drawImage(image, 0, 0);
+  try {
+    ctx.getImageData(0, 0, 1, 1);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 画像を描画した canvas を作る。stretch が true なら canvas 全体に拡大・縮小して描画する。
+ * ブラウザがその大きさの canvas を作成・描画できない場合は Error を投げる。
+ */
+function surfaceFrom(image: Drawable, width: number, height: number, stretch: boolean): Surface {
+  const surface = createSurface(width, height);
+  try {
+    const ctx = context(surface);
+    if (stretch) ctx.drawImage(image, 0, 0, width, height);
+    else ctx.drawImage(image, 0, 0);
+  } catch (e) {
+    throw new Error(`この大きさの画像は読み込めません: ${width} x ${height}`, { cause: e });
+  }
+  if (surface.width !== width || surface.height !== height) {
+    throw new Error(`この大きさの画像は読み込めません: ${width} x ${height}`);
+  }
+  return surface;
 }
 
 export default class Paint79 {
@@ -163,6 +212,8 @@ export default class Paint79 {
       containerHeight: container.clientHeight,
       devicePixelRatio: window.devicePixelRatio,
     });
+    assertCssColor(this.#opts.color, 'color');
+    if (this.#opts.background !== null) assertCssColor(this.#opts.background, 'background');
     this.#history = new History(this.#opts.historyLimit);
     this.#history.onChange = () => this.#onHistoryChange();
 
@@ -197,7 +248,7 @@ export default class Paint79 {
 
   setColor(color: string): void {
     this.#alive();
-    this.#setToolOption('color', validateColor(color));
+    this.#setToolOption('color', assertCssColor(validateColor(color), 'color'));
   }
 
   getColor(): string {
@@ -242,6 +293,7 @@ export default class Paint79 {
       options?.index === undefined
         ? this.#layers.indexOf(this.#layers.activeId) + 1
         : validateIndex(options.index, count);
+    this.#cancelStroke();
     const before = this.#structure();
     const layer = this.#layers.create(this.#newSurface(), props);
     this.#layers.insert(layer, index);
@@ -253,6 +305,7 @@ export default class Paint79 {
     this.#alive();
     this.#layers.require(layerId);
     if (this.#layers.layers.length <= 1) return false;
+    this.#cancelStroke();
     const before = this.#structure();
     const wasActive = this.#layers.activeId === layerId;
     const index = this.#layers.remove(layerId);
@@ -266,6 +319,7 @@ export default class Paint79 {
   duplicateLayer(layerId: string): string {
     this.#alive();
     const src = this.#layers.require(layerId);
+    this.#cancelStroke();
     const before = this.#structure();
     const copy = this.#layers.create(cloneSurface(src.surface), {
       ...pickProps(src),
@@ -281,6 +335,7 @@ export default class Paint79 {
     this.#layers.require(layerId);
     validateIndex(index, this.#layers.layers.length - 1);
     if (this.#layers.indexOf(layerId) === index) return;
+    this.#cancelStroke();
     const before = this.#structure();
     this.#layers.move(layerId, index);
     this.#commitStructure(before);
@@ -292,6 +347,7 @@ export default class Paint79 {
     const index = this.#layers.indexOf(layerId);
     if (index === 0) return false;
     const lower = this.#layers.layers[index - 1]!;
+    this.#cancelStroke();
     const before = this.#structure();
     const lowerBefore = cloneSurface(lower.surface);
     // 上のレイヤーの visible は考慮せず、opacity と blendMode を適用して描画する
@@ -322,6 +378,7 @@ export default class Paint79 {
       (k) => changes[k] !== layer[k],
     );
     if (keys.length === 0) return;
+    this.#cancelStroke();
     const before = this.#structure();
     Object.assign(layer, changes);
     this.#commitStructure(before);
@@ -343,6 +400,7 @@ export default class Paint79 {
   clearLayer(layerId?: string): void {
     this.#alive();
     const layer = layerId === undefined ? this.#layers.active : this.#layers.require(layerId);
+    this.#cancelStroke();
     const before = cloneSurface(layer.surface);
     clearSurface(layer.surface);
     this.#commit(
@@ -385,6 +443,7 @@ export default class Paint79 {
 
   clear(): void {
     this.#alive();
+    this.#cancelStroke();
     const layers = [...this.#layers.layers];
     const before = layers.map((l) => cloneSurface(l.surface));
     layers.forEach((l) => clearSurface(l.surface));
@@ -429,8 +488,10 @@ export default class Paint79 {
   setBackground(color: string | null): void {
     this.#alive();
     const next = validateBackground(color);
+    if (next !== null) assertCssColor(next, 'background');
     const prev = this.#opts.background;
     if (next === prev) return;
+    this.#cancelStroke();
     this.#opts.background = next;
     this.#commit(
       () => (this.#opts.background = prev),
@@ -483,51 +544,44 @@ export default class Paint79 {
         : validateBoolean(options.ignoreMismatch, 'ignoreMismatch');
     const bytes = await toBytes(source);
     const extracted = extractPaint79Data(bytes, { ignoreMismatch });
+    const pr = this.#opts.pixelRatio;
 
-    // 状態を変更する前に、すべての画像をデコードしておく(失敗した場合に状態を変更しないため)
-    let result: OpenResult;
+    // 状態を変更する前に、すべてのレイヤーの canvas を作り終えておく(失敗した場合に状態を変更しないため)
+    let reason: OpenResult['reason'];
     if (extracted.status === 'restored') {
       const { data } = extracted;
-      let bitmaps: ImageBitmap[] | null = null;
-      try {
-        bitmaps = await Promise.all(data.layers.map((l) => decodeImage(l.image)));
-      } catch {
-        bitmaps = null;
-      }
-      if (bitmaps) {
+      const surfaces = await this.#prepareLayers(data);
+      if (surfaces) {
         this.#alive();
         this.#cancelStroke();
         this.#opts.width = data.width;
         this.#opts.height = data.height;
         this.#opts.background = data.background;
-        const [pw, ph] = this.#pixelSize(data.width, data.height);
-        const layers = data.layers.map((l, i) => {
-          const surface = createSurface(pw, ph);
-          // 保存時と pixelRatio が異なる場合は拡大・縮小する
-          context(surface).drawImage(bitmaps[i]!, 0, 0, pw, ph);
-          return this.#layers.create(surface, pickProps(l), l.id);
-        });
+        const layers = data.layers.map((l, i) =>
+          this.#layers.create(surfaces[i]!, pickProps(l), l.id),
+        );
         this.#layers.replaceAll(layers, data.activeLayerId);
         this.#afterOpen();
         return { restored: true };
       }
-      result = { restored: false, reason: 'corrupted' };
+      reason = 'corrupted';
     } else {
-      result = { restored: false, reason: extracted.status };
+      reason = extracted.status;
     }
 
     const bitmap = await decodeImage(bytes);
     this.#alive();
+    const width = bitmap.width / pr;
+    const height = bitmap.height / pr;
+    const surface = surfaceFrom(bitmap, pixelSize(width, pr), pixelSize(height, pr), false);
+    bitmap.close();
     this.#cancelStroke();
-    const pr = this.#opts.pixelRatio;
-    this.#opts.width = bitmap.width / pr;
-    this.#opts.height = bitmap.height / pr;
-    const surface = this.#newSurface();
-    context(surface).drawImage(bitmap, 0, 0);
+    this.#opts.width = width;
+    this.#opts.height = height;
     const layer = this.#layers.create(surface, { name: 'レイヤー 1' });
     this.#layers.replaceAll([layer], layer.id);
     this.#afterOpen();
-    return result;
+    return { restored: false, reason };
   }
 
   toDataURL(type?: string, quality?: number): string {
@@ -545,6 +599,12 @@ export default class Paint79 {
     const target = options?.layerId === undefined ? null : this.#layers.require(options.layerId).id;
     const image = await toDrawable(source);
     this.#alive();
+    // canvas の汚染は元に戻せず、以後保存できなくなるため、汚染する画像は描画しない
+    if (taintsCanvas(image)) {
+      throw new Error(
+        '別オリジンの画像を CORS の許可なしに読み込んだ場合など、ピクセルを読み出せない画像は描画できません',
+      );
+    }
 
     // 画像の 1 ピクセルが内部解像度の 1 ピクセルになるように、左上を基準として描画する
     const draw = (surface: Surface) => {
@@ -556,7 +616,9 @@ export default class Paint79 {
     };
 
     if (target !== null) {
+      // 画像の読み込みを待つ間に削除されていれば RangeError
       const layer = this.#layers.require(target);
+      this.#cancelStroke();
       const before = cloneSurface(layer.surface);
       draw(layer.surface);
       const after = cloneSurface(layer.surface);
@@ -568,6 +630,7 @@ export default class Paint79 {
       return layer.id;
     }
 
+    this.#cancelStroke();
     const before = this.#structure();
     const layer = this.#layers.create(this.#newSurface());
     draw(layer.surface);
@@ -615,7 +678,7 @@ export default class Paint79 {
 
   #pixelSize(width: number, height: number): [number, number] {
     const pr = this.#opts.pixelRatio;
-    return [Math.max(1, Math.round(width * pr)), Math.max(1, Math.round(height * pr))];
+    return [pixelSize(width, pr), pixelSize(height, pr)];
   }
 
   #newSurface(): Surface {
@@ -713,6 +776,30 @@ export default class Paint79 {
     );
   }
 
+  /**
+   * 復元するレイヤーの canvas を作る。レイヤー画像をデコードできない、または背景色を解釈できない場合は
+   * null(corrupted)。メモリの使用量を抑えるため、レイヤー画像は 1 枚ずつデコードする。
+   */
+  async #prepareLayers(data: Paint79Data): Promise<Surface[] | null> {
+    if (data.background !== null && !isCssColor(data.background)) return null;
+    const pr = this.#opts.pixelRatio;
+    const pw = pixelSize(data.width, pr);
+    const ph = pixelSize(data.height, pr);
+    const surfaces: Surface[] = [];
+    for (const layer of data.layers) {
+      let bitmap: ImageBitmap;
+      try {
+        bitmap = await decodeImage(layer.image, true);
+      } catch {
+        return null;
+      }
+      // 保存時と pixelRatio が異なる場合は拡大・縮小する
+      surfaces.push(surfaceFrom(bitmap, pw, ph, true));
+      bitmap.close();
+    }
+    return surfaces;
+  }
+
   #afterOpen(): void {
     this.#applySize();
     this.#history.clear();
@@ -733,6 +820,8 @@ export default class Paint79 {
     listen('pointermove', (e) => this.#onPointerMove(e));
     listen('pointerup', (e) => this.#onPointerUp(e));
     listen('pointercancel', (e) => this.#onPointerCancel(e));
+    // ポインターの捕捉が解除された場合は、pointerup を取りこぼしたものとして確定する
+    listen('lostpointercapture', (e) => this.#onLostPointerCapture(e));
   }
 
   #onPointerDown(e: PointerEvent): void {
@@ -747,9 +836,17 @@ export default class Paint79 {
       palmRejection: this.#opts.palmRejection,
       penDetected: this.#penDetected,
       layerDrawable: layer.visible && !layer.locked,
+      pointerId: e.pointerId,
       activeStrokePointerType: this.#stroke?.pointerType ?? null,
+      activeStrokePointerId: this.#stroke?.pointerId ?? null,
     });
     if (decision === 'ignore') return;
+    if (decision === 'restart') {
+      // pointerup を取りこぼしていたので、描画中のストロークを確定してから判断し直す
+      this.#finishStroke(this.#stroke!, null);
+      this.#onPointerDown(e);
+      return;
+    }
     e.preventDefault();
     if (decision === 'replace') this.#cancelStroke();
     this.#startStroke(e, layer);
@@ -820,27 +917,51 @@ export default class Paint79 {
 
   #onPointerMove(e: PointerEvent): void {
     const stroke = this.#stroke;
-    if (!stroke || e.pointerId !== stroke.pointerId) return;
+    const decision = decidePointerMove({
+      isStrokePointer: stroke !== null && e.pointerId === stroke.pointerId,
+      pointerType: e.pointerType,
+      buttons: e.buttons,
+    });
+    if (!stroke || decision === 'ignore') return;
+    if (decision === 'finish') {
+      // ボタンを離した後のホバー位置は、ストロークに含めない
+      this.#finishStroke(stroke, null);
+      return;
+    }
     const coalesced = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
     this.#extendStroke(stroke, coalesced.length > 0 ? coalesced : [e]);
   }
 
   #onPointerUp(e: PointerEvent): void {
     const stroke = this.#stroke;
-    if (!stroke || e.pointerId !== stroke.pointerId) return;
-    // 離した位置の筆圧は 0 になるため、位置だけを使い、太さは直前の点に合わせる
-    const { x, y } = toCanvasPoint(
-      e.clientX,
-      e.clientY,
-      stroke.rect,
-      this.#opts.width,
-      this.#opts.height,
-    );
-    const last = stroke.points[stroke.points.length - 1]!;
-    if (x !== last.x || y !== last.y) {
-      const p = { x, y, width: last.width };
-      drawSegment(stroke.layer.surface, last, p, stroke.style);
-      stroke.points.push(p);
+    if (stroke && e.pointerId === stroke.pointerId) this.#finishStroke(stroke, e);
+  }
+
+  #onLostPointerCapture(e: PointerEvent): void {
+    const stroke = this.#stroke;
+    if (stroke && e.pointerId === stroke.pointerId) this.#finishStroke(stroke, null);
+  }
+
+  /**
+   * ストロークを確定し、履歴に記録する。
+   * up は pointerup のイベントで、その位置まで線を延ばす。取りこぼしによる確定では null。
+   */
+  #finishStroke(stroke: Stroke, up: PointerEvent | null): void {
+    if (up) {
+      // 離した位置の筆圧は 0 になるため、位置だけを使い、太さは直前の点に合わせる
+      const { x, y } = toCanvasPoint(
+        up.clientX,
+        up.clientY,
+        stroke.rect,
+        this.#opts.width,
+        this.#opts.height,
+      );
+      const last = stroke.points[stroke.points.length - 1]!;
+      if (x !== last.x || y !== last.y) {
+        const p = { x, y, width: last.width };
+        drawSegment(stroke.layer.surface, last, p, stroke.style);
+        stroke.points.push(p);
+      }
     }
     this.#stroke = null;
     this.#render();

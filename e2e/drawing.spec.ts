@@ -14,6 +14,9 @@ import { drawStroke, sendPointer } from './helpers/pointer';
 
 const RED: [number, number, number, number] = [255, 0, 0, 255];
 
+// タッチ入力を含むテストがあるため、タッチ対応のコンテキストで実行する(AGENTS.md)
+test.use({ hasTouch: true });
+
 test.describe('ペン', () => {
   test('マウスで描いた線の上は描画色になり、線から離れた場所は背景色のまま', async ({ page }) => {
     await setup(page, { width: 100, height: 100, lineWidth: 6 });

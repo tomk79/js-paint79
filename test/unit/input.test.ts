@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   decidePointerDown,
+  decidePointerMove,
   strokeBounds,
   strokeWidth,
   toCanvasPoint,
@@ -47,7 +48,9 @@ describe('decidePointerDown', () => {
     palmRejection: false,
     penDetected: false,
     layerDrawable: true,
+    pointerId: 1,
     activeStrokePointerType: null,
+    activeStrokePointerId: null,
   };
 
   test('条件を満たせばストロークを開始する', () => {
@@ -137,5 +140,56 @@ describe('strokeBounds', () => {
 
   test('点がなければ null', () => {
     expect(strokeBounds([], { width: 10, height: 10, pixelRatio: 1 })).toBeNull();
+  });
+});
+
+describe('decidePointerDown(pointerup の取りこぼし)', () => {
+  const base: PointerDownContext = {
+    pointerType: 'mouse',
+    readOnly: false,
+    pointerTypes: ['mouse', 'touch', 'pen'],
+    palmRejection: false,
+    penDetected: false,
+    layerDrawable: true,
+    pointerId: 1,
+    activeStrokePointerType: 'mouse',
+    activeStrokePointerId: 1,
+  };
+
+  test('描画中のポインターと同じ ID の pointerdown は、描画中のストロークを確定してから判断し直す', () => {
+    expect(decidePointerDown(base)).toBe('restart');
+  });
+
+  test('別の ID なら従来どおり無視する', () => {
+    expect(decidePointerDown({ ...base, pointerId: 2 })).toBe('ignore');
+  });
+});
+
+describe('decidePointerMove', () => {
+  test('描画中のポインターでなければ無視する', () => {
+    expect(decidePointerMove({ isStrokePointer: false, pointerType: 'mouse', buttons: 1 })).toBe(
+      'ignore',
+    );
+  });
+
+  test('ボタンが押されていればストロークを延長する', () => {
+    expect(decidePointerMove({ isStrokePointer: true, pointerType: 'mouse', buttons: 1 })).toBe(
+      'extend',
+    );
+  });
+
+  test('マウスのボタンがすべて離されていれば、pointerup を取りこぼしたものとして確定する', () => {
+    expect(decidePointerMove({ isStrokePointer: true, pointerType: 'mouse', buttons: 0 })).toBe(
+      'finish',
+    );
+  });
+
+  test('ペン・タッチは buttons を見ない(pointerup が必ず届くため)', () => {
+    expect(decidePointerMove({ isStrokePointer: true, pointerType: 'pen', buttons: 0 })).toBe(
+      'extend',
+    );
+    expect(decidePointerMove({ isStrokePointer: true, pointerType: 'touch', buttons: 0 })).toBe(
+      'extend',
+    );
   });
 });
