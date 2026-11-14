@@ -3,15 +3,44 @@ import { expect, test, type Page } from '@playwright/test';
 import { BLACK, events, expectColor, pixel, recordEvents, setup, WHITE } from './helpers/paint';
 import { drawStroke, sendPointer } from './helpers/pointer';
 
-const RED: [number, number, number, number] = [255, 0, 0, 255];
+declare global {
+  interface Window {
+    /** stroke: 描画中のレイヤー、below: その下のレイヤー、above: その上のレイヤー */
+    __ids: { stroke: string; below: string; above: string };
+    __solid: (w: number, h: number, color: string) => Promise<ImageBitmap>;
+  }
+}
 
-/** y = 30 に線 A を描いて確定し、y = 70 に線 B を描きかけの状態にする */
+/**
+ * レイヤーを 下(below)・描画中(stroke)・上(above)の 3 枚にし、
+ * below の y = 30 に線 A を描いて確定し、stroke の y = 70 に線 B を描きかけの状態にする。
+ * リドゥできる操作も 1 つ用意しておく。
+ */
 async function strokeInProgress(page: Page) {
   await setup(page, { width: 100, height: 100, lineWidth: 6 });
   await drawStroke(page, [
     [10, 30],
     [90, 30],
   ]);
+  await page.evaluate(() => {
+    const p = window.paint79;
+    const below = p.getActiveLayerId();
+    const stroke = p.addLayer({ name: 'stroke' });
+    const above = p.addLayer({ name: 'above', index: 2 });
+    p.setActiveLayer(stroke);
+    p.setLayerProperties(below, { name: 'below' });
+    p.undo(); // リドゥできる状態にする
+    window.__ids = { stroke, below, above };
+    window.__solid = (w, h, color) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, w, h);
+      return createImageBitmap(c);
+    };
+  });
   await drawStroke(
     page,
     [
@@ -24,18 +53,30 @@ async function strokeInProgress(page: Page) {
   await recordEvents(page, ['strokeend']);
 }
 
-test.describe('描画中にドキュメントを変更する API が呼ばれた場合', () => {
+/** 描きかけのストロークを続けて、ポインターを離す */
+async function continueStroke(page: Page) {
+  await sendPointer(page, 'pointermove', [90, 70]);
+  await sendPointer(page, 'pointerup', [90, 70]);
+}
+
+test.describe('描画中のストロークに影響する API が呼ばれた場合', () => {
   const operations: [string, string][] = [
-    ['clear()', 'window.paint79.clear()'],
-    ['clearLayer()', 'window.paint79.clearLayer()'],
     ['undo()', 'window.paint79.undo()'],
+    ['redo()', 'window.paint79.redo()'],
     ['resize()', 'window.paint79.resize(100, 90)'],
-    ['setBackground()', "window.paint79.setBackground('#fafafa')"],
-    ['addLayer()', 'window.paint79.addLayer()'],
-    ['removeLayer()', 'window.paint79.removeLayer(window.paint79.addLayer())'],
+    ['clear()', 'window.paint79.clear()'],
+    ['clearLayer(描画中のレイヤー)', 'window.paint79.clearLayer(window.__ids.stroke)'],
+    ['removeLayer(描画中のレイヤー)', 'window.paint79.removeLayer(window.__ids.stroke)'],
+    ['duplicateLayer(描画中のレイヤー)', 'window.paint79.duplicateLayer(window.__ids.stroke)'],
+    ['mergeDown(描画中のレイヤー)', 'window.paint79.mergeDown(window.__ids.stroke)'],
+    ['mergeDown(描画中のレイヤーの上のレイヤー)', 'window.paint79.mergeDown(window.__ids.above)'],
     [
-      'setLayerProperties()',
-      "window.paint79.setLayerProperties(window.paint79.getActiveLayerId(), { name: 'x' })",
+      'loadImage({ layerId: 描画中のレイヤー })',
+      "window.__solid(5, 5, '#ff0000').then((b) => window.paint79.loadImage(b, { layerId: window.__ids.stroke }))",
+    ],
+    [
+      'open()',
+      "window.__solid(100, 100, '#ffffff').then((b) => { const c = document.createElement('canvas'); c.width = 100; c.height = 100; c.getContext('2d').drawImage(b, 0, 0); return new Promise((r) => c.toBlob(r)); }).then((blob) => window.paint79.open(blob))",
     ],
   ];
 
@@ -45,9 +86,7 @@ test.describe('描画中にドキュメントを変更する API が呼ばれた
     }) => {
       await strokeInProgress(page);
       await page.evaluate((op) => (0, eval)(op), op);
-      await sendPointer(page, 'pointermove', [90, 70]);
-      await sendPointer(page, 'pointerup', [90, 70]);
-      // 線 B は描かれていない(取り消された)
+      await continueStroke(page);
       expectColor(await pixel(page, 30, 70), WHITE);
       expectColor(await pixel(page, 70, 70), WHITE);
       expect(await events(page)).toEqual([]);
@@ -64,28 +103,47 @@ test.describe('描画中にドキュメントを変更する API が呼ばれた
     expectColor(await pixel(page, 50, 30), BLACK);
     expectColor(await pixel(page, 30, 70), WHITE);
   });
+});
 
-  test('loadImage({ layerId }) の完了が描画中に来ても、履歴と画面が食い違わない', async ({
-    page,
-  }) => {
-    await strokeInProgress(page);
-    await page.evaluate(async () => {
-      const c = document.createElement('canvas');
-      c.width = 20;
-      c.height = 20;
-      const ctx = c.getContext('2d')!;
-      ctx.fillStyle = '#ff0000';
-      ctx.fillRect(0, 0, 20, 20);
-      await window.paint79.loadImage(await createImageBitmap(c), {
-        layerId: window.paint79.getActiveLayerId(),
-      });
+test.describe('描画中のストロークに影響しない API が呼ばれた場合', () => {
+  const operations: [string, string][] = [
+    ['addLayer()', 'window.paint79.addLayer()'],
+    ['moveLayer()', 'window.paint79.moveLayer(window.__ids.above, 0)'],
+    [
+      'setLayerProperties()',
+      "window.paint79.setLayerProperties(window.__ids.stroke, { name: 'renamed', locked: true })",
+    ],
+    ['setActiveLayer()', 'window.paint79.setActiveLayer(window.__ids.below)'],
+    ['setBackground()', "window.paint79.setBackground('#fafafa')"],
+    ['clearLayer(別のレイヤー)', 'window.paint79.clearLayer(window.__ids.above)'],
+    ['removeLayer(別のレイヤー)', 'window.paint79.removeLayer(window.__ids.above)'],
+    ['duplicateLayer(別のレイヤー)', 'window.paint79.duplicateLayer(window.__ids.below)'],
+    [
+      'loadImage(新しいレイヤー)',
+      "window.__solid(5, 5, '#ff0000').then((b) => window.paint79.loadImage(b))",
+    ],
+    [
+      'loadImage({ layerId: 別のレイヤー })',
+      "window.__solid(5, 5, '#ff0000').then((b) => window.paint79.loadImage(b, { layerId: window.__ids.below }))",
+    ],
+  ];
+
+  for (const [name, op] of operations) {
+    test(`${name}: ストロークはそのまま続き、描き終えたときに履歴に記録される`, async ({
+      page,
+    }) => {
+      await strokeInProgress(page);
+      await page.evaluate((op) => (0, eval)(op), op);
+      await continueStroke(page);
+      expectColor(await pixel(page, 30, 70), BLACK);
+      expectColor(await pixel(page, 70, 70), BLACK);
+      expect((await events(page)).map((e) => e.name)).toEqual(['strokeend']);
+      // 最後の履歴はストローク: アンドゥで線 B だけが消える
+      await page.evaluate(() => window.paint79.undo());
+      expectColor(await pixel(page, 70, 70), WHITE);
+      expectColor(await pixel(page, 50, 30), BLACK);
     });
-    await sendPointer(page, 'pointerup', [50, 70]);
-    expectColor(await pixel(page, 10, 10), RED);
-    await page.evaluate(() => window.paint79.undo());
-    expectColor(await pixel(page, 10, 10), WHITE);
-    expectColor(await pixel(page, 50, 30), BLACK);
-  });
+  }
 });
 
 test.describe('ストロークの開始時の設定', () => {

@@ -444,6 +444,136 @@ test.describe('open(レビューで見つかった不具合の再発防止)', ()
   });
 });
 
+test.describe('open(ブラウザ間の差異・上限)', () => {
+  test('背景色をこのブラウザが解釈できなくても、レイヤーを復元し、背景色を null として読み込む', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await prepareHelpers(page);
+    await drawSampleAndExport(page);
+    const r = await page.evaluate(async () => {
+      const png = window.__png;
+      const bytes = new Uint8Array(await window.__blob.arrayBuffer());
+      const paNT = png.readChunks(bytes).find((c) => c.type === 'paNT')!;
+      const d = paNT.data;
+      const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
+      const headerLength = view.getUint32(12);
+      const header = JSON.parse(new TextDecoder().decode(d.subarray(16, 16 + headerLength)));
+      // どのブラウザも解釈できない値(将来の色の構文や、他のブラウザだけが解釈できる値の代わり)
+      header.background = 'future-color(1 2 3)';
+      const json = new TextEncoder().encode(JSON.stringify(header));
+      const layers = d.subarray(16 + headerLength);
+      const data = new Uint8Array(16 + json.length + layers.length);
+      data.set(d.subarray(0, 12));
+      new DataView(data.buffer).setUint32(12, json.length);
+      data.set(json, 16);
+      data.set(layers, 16 + json.length);
+      // 既存の paNT を取り除いた完成イメージに、書き換えた paNT を入れる
+      const without = new Uint8Array([
+        ...bytes.subarray(0, paNT.offset),
+        ...bytes.subarray(paNT.offset + 12 + d.length),
+      ]);
+      const result = await window.paint79.open(
+        png.insertChunkBeforeIEND(without, png.buildChunk('paNT', data)),
+      );
+      return {
+        result,
+        names: window.paint79.getLayers().map((l) => l.name),
+        background: window.paint79.getBackground(),
+      };
+    });
+    expect(r).toEqual({
+      result: { restored: true },
+      names: ['赤', '青', '非表示'],
+      background: null,
+    });
+    expectColor(await pixel(page, 50, 20), RED);
+  });
+
+  // canvas の大きさの上限はブラウザごとに異なる(Chromium と Firefox は 1 辺 65535、WebKit は面積で制限)。
+  // そのため、このブラウザでその大きさの canvas を作れるかどうかで、期待する結果を決める
+  test('canvas の上限を超える大きさの画像は Error で、キャンバスの状態を変更しない', async ({
+    page,
+  }) => {
+    await setup(page, { width: 100, height: 80 });
+    await prepareHelpers(page);
+    await drawStroke(page, [
+      [0, 40],
+      [100, 40],
+    ]);
+    const r = await page.evaluate(async () => {
+      const png = window.__png;
+      // 幅 100000 x 高さ 1 の不透明な赤の PNG
+      const width = 100000;
+      const canvasWorks = (() => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = width;
+          c.height = 1;
+          const ctx = c.getContext('2d')!;
+          ctx.fillRect(width - 1, 0, 1, 1);
+          return ctx.getImageData(width - 1, 0, 1, 1).data[3] === 255;
+        } catch {
+          return false;
+        }
+      })();
+      const raw = new Uint8Array(1 + width * 4);
+      for (let i = 0; i < width; i++) raw.set([255, 0, 0, 255], 1 + i * 4);
+      const deflated = new Uint8Array(
+        await new Response(
+          new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate')),
+        ).arrayBuffer(),
+      );
+      const ihdr = new Uint8Array(13);
+      new DataView(ihdr.buffer).setUint32(0, width);
+      new DataView(ihdr.buffer).setUint32(4, 1);
+      ihdr[8] = 8;
+      ihdr[9] = 6;
+      const bytes = new Uint8Array([
+        0x89,
+        0x50,
+        0x4e,
+        0x47,
+        0x0d,
+        0x0a,
+        0x1a,
+        0x0a,
+        ...png.buildChunk('IHDR', ihdr),
+        ...png.buildChunk('IDAT', deflated),
+        ...png.buildChunk('IEND', new Uint8Array()),
+      ]);
+      const before = JSON.stringify(window.paint79.getLayers());
+      let name = 'no error';
+      try {
+        await window.paint79.open(bytes);
+      } catch (e) {
+        name = (e as Error).name;
+      }
+      const c = window.paint79.getCanvas();
+      return {
+        canvasWorks,
+        name,
+        same: JSON.stringify(window.paint79.getLayers()) === before,
+        size: [c.width, c.height, c.style.width],
+        canUndo: window.paint79.canUndo(),
+      };
+    });
+    if (r.canvasWorks) {
+      // このブラウザでは作成できる大きさなので、通常どおり読み込める
+      expect(r).toMatchObject({ name: 'no error', size: [100000, 1, '100000px'] });
+    } else {
+      expect(r).toEqual({
+        canvasWorks: false,
+        name: 'Error',
+        same: true,
+        size: [100, 80, '100px'],
+        canUndo: true,
+      });
+      expectColor(await pixel(page, 50, 40), BLACK);
+    }
+  });
+});
+
 test.describe('loadImage(汚染された画像)', () => {
   test('別オリジンの画像を CORS の許可なしに読み込んだ場合は Error で、状態を変更しない', async ({
     page,

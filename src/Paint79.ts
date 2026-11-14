@@ -175,6 +175,13 @@ function surfaceFrom(image: Drawable, width: number, height: number, stretch: bo
   const surface = createSurface(width, height);
   try {
     const ctx = context(surface);
+    // 上限を超える canvas は、ブラウザによっては例外を出さずに描画だけが失われるため、
+    // 右下の 1 ピクセルを塗って読み戻せるかを確かめる
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(width - 1, height - 1, 1, 1);
+    if (ctx.getImageData(width - 1, height - 1, 1, 1).data[3] !== 255)
+      throw new Error('canvas に描画できません');
+    ctx.clearRect(width - 1, height - 1, 1, 1);
     if (stretch) ctx.drawImage(image, 0, 0, width, height);
     else ctx.drawImage(image, 0, 0);
   } catch (e) {
@@ -293,7 +300,6 @@ export default class Paint79 {
       options?.index === undefined
         ? this.#layers.indexOf(this.#layers.activeId) + 1
         : validateIndex(options.index, count);
-    this.#cancelStroke();
     const before = this.#structure();
     const layer = this.#layers.create(this.#newSurface(), props);
     this.#layers.insert(layer, index);
@@ -305,7 +311,7 @@ export default class Paint79 {
     this.#alive();
     this.#layers.require(layerId);
     if (this.#layers.layers.length <= 1) return false;
-    this.#cancelStroke();
+    this.#cancelStrokeOn(this.#layers.require(layerId));
     const before = this.#structure();
     const wasActive = this.#layers.activeId === layerId;
     const index = this.#layers.remove(layerId);
@@ -319,7 +325,7 @@ export default class Paint79 {
   duplicateLayer(layerId: string): string {
     this.#alive();
     const src = this.#layers.require(layerId);
-    this.#cancelStroke();
+    this.#cancelStrokeOn(src);
     const before = this.#structure();
     const copy = this.#layers.create(cloneSurface(src.surface), {
       ...pickProps(src),
@@ -335,7 +341,6 @@ export default class Paint79 {
     this.#layers.require(layerId);
     validateIndex(index, this.#layers.layers.length - 1);
     if (this.#layers.indexOf(layerId) === index) return;
-    this.#cancelStroke();
     const before = this.#structure();
     this.#layers.move(layerId, index);
     this.#commitStructure(before);
@@ -347,7 +352,7 @@ export default class Paint79 {
     const index = this.#layers.indexOf(layerId);
     if (index === 0) return false;
     const lower = this.#layers.layers[index - 1]!;
-    this.#cancelStroke();
+    this.#cancelStrokeOn(upper, lower);
     const before = this.#structure();
     const lowerBefore = cloneSurface(lower.surface);
     // 上のレイヤーの visible は考慮せず、opacity と blendMode を適用して描画する
@@ -378,7 +383,6 @@ export default class Paint79 {
       (k) => changes[k] !== layer[k],
     );
     if (keys.length === 0) return;
-    this.#cancelStroke();
     const before = this.#structure();
     Object.assign(layer, changes);
     this.#commitStructure(before);
@@ -400,7 +404,7 @@ export default class Paint79 {
   clearLayer(layerId?: string): void {
     this.#alive();
     const layer = layerId === undefined ? this.#layers.active : this.#layers.require(layerId);
-    this.#cancelStroke();
+    this.#cancelStrokeOn(layer);
     const before = cloneSurface(layer.surface);
     clearSurface(layer.surface);
     this.#commit(
@@ -491,7 +495,6 @@ export default class Paint79 {
     if (next !== null) assertCssColor(next, 'background');
     const prev = this.#opts.background;
     if (next === prev) return;
-    this.#cancelStroke();
     this.#opts.background = next;
     this.#commit(
       () => (this.#opts.background = prev),
@@ -556,7 +559,9 @@ export default class Paint79 {
         this.#cancelStroke();
         this.#opts.width = data.width;
         this.#opts.height = data.height;
-        this.#opts.background = data.background;
+        // 背景色をこのブラウザが解釈できない場合は、レイヤーを失わないよう透明として読み込む
+        this.#opts.background =
+          data.background !== null && isCssColor(data.background) ? data.background : null;
         const layers = data.layers.map((l, i) =>
           this.#layers.create(surfaces[i]!, pickProps(l), l.id),
         );
@@ -618,7 +623,7 @@ export default class Paint79 {
     if (target !== null) {
       // 画像の読み込みを待つ間に削除されていれば RangeError
       const layer = this.#layers.require(target);
-      this.#cancelStroke();
+      this.#cancelStrokeOn(layer);
       const before = cloneSurface(layer.surface);
       draw(layer.surface);
       const after = cloneSurface(layer.surface);
@@ -630,7 +635,6 @@ export default class Paint79 {
       return layer.id;
     }
 
-    this.#cancelStroke();
     const before = this.#structure();
     const layer = this.#layers.create(this.#newSurface());
     draw(layer.surface);
@@ -777,11 +781,9 @@ export default class Paint79 {
   }
 
   /**
-   * 復元するレイヤーの canvas を作る。レイヤー画像をデコードできない、または背景色を解釈できない場合は
-   * null(corrupted)。メモリの使用量を抑えるため、レイヤー画像は 1 枚ずつデコードする。
+   * 復元するレイヤーの canvas を作る。レイヤー画像をデコードできない場合は null(corrupted)。メモリの使用量を抑えるため、レイヤー画像は 1 枚ずつデコードする。
    */
   async #prepareLayers(data: Paint79Data): Promise<Surface[] | null> {
-    if (data.background !== null && !isCssColor(data.background)) return null;
     const pr = this.#opts.pixelRatio;
     const pw = pixelSize(data.width, pr);
     const ph = pixelSize(data.height, pr);
@@ -993,6 +995,14 @@ export default class Paint79 {
 
   #onPointerCancel(e: PointerEvent): void {
     if (this.#stroke && e.pointerId === this.#stroke.pointerId) this.#cancelStroke();
+  }
+
+  /**
+   * 描画中のストロークが指定したレイヤーのいずれかに描かれていれば、取り消す。
+   * ストロークのレイヤーに影響しない操作では取り消さない(docs/specs/api.md)。
+   */
+  #cancelStrokeOn(...layers: Layer<Surface>[]): void {
+    if (this.#stroke && layers.includes(this.#stroke.layer)) this.#cancelStroke();
   }
 
   /** 描画中のストロークを取り消す(履歴にもイベントにも残さない) */
