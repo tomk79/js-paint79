@@ -519,21 +519,27 @@ export default class Paint79 {
     this.#alive();
     const embedData =
       options?.embedData === undefined ? true : validateBoolean(options.embedData, 'embedData');
-    const target = createSurface(this.#canvas.width, this.#canvas.height);
-    composite(target, this.#layers.layers, this.#opts.background);
-    const compositeBlob = await canvasToBlob(target, 'image/png');
-    if (!embedData) return compositeBlob;
-
-    const layers = [...this.#layers.layers];
-    const images = await Promise.all(
-      layers.map(async (l) => new Uint8Array(await (await canvasToBlob(l.surface)).arrayBuffer())),
-    );
-    const png = embedPaint79Data(new Uint8Array(await compositeBlob.arrayBuffer()), {
+    // 書き出す内容は、呼び出した時点で確定させる。canvas.toBlob() は呼び出した時点の画像を複製するので、
+    // 完成イメージと全レイヤーの書き出しを同時に開始し、ヘッダーの値も先に取り出しておく
+    const layers = this.#committedLayers();
+    const header = {
       width: this.#opts.width,
       height: this.#opts.height,
       pixelRatio: this.#opts.pixelRatio,
       background: this.#opts.background,
       activeLayerId: this.#layers.activeId,
+    };
+    const compositeBlob = canvasToBlob(this.#committedComposite(layers), 'image/png');
+    if (!embedData) return compositeBlob;
+    const layerBlobs = layers.map((l) => canvasToBlob(l.surface, 'image/png'));
+
+    const toBytes = async (b: Promise<Blob>) => new Uint8Array(await (await b).arrayBuffer());
+    const [compositeBytes, ...images] = await Promise.all([
+      toBytes(compositeBlob),
+      ...layerBlobs.map(toBytes),
+    ]);
+    const png = embedPaint79Data(compositeBytes!, {
+      ...header,
       layers: layers.map((l, i) => ({ id: l.id, ...pickProps(l), image: images[i]! })),
     });
     return new Blob([png], { type: 'image/png' });
@@ -591,12 +597,12 @@ export default class Paint79 {
 
   toDataURL(type?: string, quality?: number): string {
     this.#alive();
-    return this.#canvas.toDataURL(type, quality);
+    return this.#committedComposite(this.#committedLayers()).toDataURL(type, quality);
   }
 
   async toBlob(type?: string, quality?: number): Promise<Blob> {
     this.#alive();
-    return canvasToBlob(this.#canvas, type, quality);
+    return canvasToBlob(this.#committedComposite(this.#committedLayers()), type, quality);
   }
 
   async loadImage(source: LoadImageSource, options?: LoadImageOptions): Promise<string> {
@@ -696,6 +702,25 @@ export default class Paint79 {
     this.#canvas.height = ph;
     this.#canvas.style.width = `${this.#opts.width}px`;
     this.#canvas.style.height = `${this.#opts.height}px`;
+  }
+
+  /**
+   * 書き出し用のレイヤー。描画中のストロークのレイヤーは、ストロークを描き始める前の内容にする。
+   * 描き終えていないストロークは取り消される可能性があり、履歴にない内容を保存しないため(docs/specs/api.md)
+   */
+  #committedLayers(): Layer<Surface>[] {
+    const stroke = this.#stroke;
+    return this.#layers.layers.map((l) =>
+      stroke && stroke.layer === l ? { ...l, surface: stroke.backup } : l,
+    );
+  }
+
+  /** 書き出し用の完成イメージ。描画中でなければ表示用 canvas をそのまま使う */
+  #committedComposite(layers: readonly Layer<Surface>[]): HTMLCanvasElement {
+    if (!this.#stroke) return this.#canvas;
+    const target = createSurface(this.#canvas.width, this.#canvas.height);
+    composite(target, layers, this.#opts.background);
+    return target;
   }
 
   #render(): void {

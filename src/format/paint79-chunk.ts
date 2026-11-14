@@ -158,7 +158,7 @@ function parseHeader(
   if (!isObject(header)) fail();
   const { width, height, pixelRatio, background, activeLayerId } = header;
   if (!isPositive(width) || !isPositive(height) || !isPositive(pixelRatio)) fail();
-  if (background !== null && (typeof background !== 'string' || background === '')) fail();
+  if (background !== null && typeof background !== 'string') fail();
   // ヘッダーのサイズが実際の画像と一致することを、デコードの前に IHDR だけで確認する。
   // 実際と異なる巨大なサイズによって、過大なメモリを確保することを防ぐため。
   if (
@@ -201,7 +201,8 @@ function parseHeader(
     width,
     height,
     pixelRatio,
-    background,
+    // 空文字列は、背景色を失わないための他の扱い(解釈できない色)と揃えて透明とする
+    background: background === '' ? null : background,
     // 存在しないレイヤーを指している場合は、最前面のレイヤーをアクティブにする
     activeLayerId:
       typeof activeLayerId === 'string' && ids.has(activeLayerId) ? activeLayerId : lastLayer.id,

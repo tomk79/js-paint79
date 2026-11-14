@@ -1,6 +1,15 @@
 // ストロークの開始から確定・取り消しまでの扱い(docs/specs/api.md の「ポインター操作による描画」)
 import { expect, test, type Page } from '@playwright/test';
-import { BLACK, events, expectColor, pixel, recordEvents, setup, WHITE } from './helpers/paint';
+import {
+  BLACK,
+  blobPixel,
+  events,
+  expectColor,
+  pixel,
+  recordEvents,
+  setup,
+  WHITE,
+} from './helpers/paint';
 import { drawStroke, sendPointer } from './helpers/pointer';
 
 declare global {
@@ -144,6 +153,47 @@ test.describe('描画中のストロークに影響しない API が呼ばれた
       expectColor(await pixel(page, 50, 30), BLACK);
     });
   }
+});
+
+test.describe('書き出しと描画中のストローク', () => {
+  const outputs: [string, string][] = [
+    ['exportPNG()', 'window.paint79.exportPNG()'],
+    ['toBlob()', 'window.paint79.toBlob()'],
+    ['toDataURL()', 'fetch(window.paint79.toDataURL()).then((r) => r.blob())'],
+  ];
+
+  for (const [name, expr] of outputs) {
+    test(`${name} の出力には、描画中のストロークを含めない(画面には表示される)`, async ({
+      page,
+    }) => {
+      await strokeInProgress(page);
+      expectColor(await pixel(page, 30, 70), BLACK);
+      expectColor(await blobPixel(page, expr, 30, 70), WHITE);
+      expectColor(await blobPixel(page, expr, 50, 30), BLACK);
+      // 描き終えた後は含める
+      await continueStroke(page);
+      expectColor(await blobPixel(page, expr, 30, 70), BLACK);
+    });
+  }
+
+  test('exportPNG() のレイヤー情報にも、描画中のストロークを含めない', async ({ page }) => {
+    await strokeInProgress(page);
+    const r = await page.evaluate(async () => {
+      const blob = await window.paint79.exportPNG();
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const other = new window.Paint79(div, { pixelRatio: 1 });
+      const result = await other.open(blob);
+      // 描画中だったレイヤーだけを表示して、その内容を確かめる
+      for (const l of other.getLayers()) {
+        other.setLayerProperties(l.id, { visible: l.id === window.__ids.stroke });
+      }
+      const d = other.getCanvas().getContext('2d')!.getImageData(30, 70, 1, 1).data;
+      return { result, pixel: [d[0], d[1], d[2], d[3]] };
+    });
+    expect(r.result).toEqual({ restored: true });
+    expectColor(r.pixel as [number, number, number, number], WHITE);
+  });
 });
 
 test.describe('ストロークの開始時の設定', () => {

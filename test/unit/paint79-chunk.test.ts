@@ -222,7 +222,6 @@ describe('extractPaint79Data', () => {
       { ...base, width: '2' },
       { ...base, width: 0 },
       { ...base, background: 1 },
-      { ...base, background: '' },
       { ...base, layers: [] },
       { ...base, layers: [{ ...base.layers[0], opacity: 2 }] },
       { ...base, layers: [{ ...base.layers[0], blendMode: 'unknown' }] },
@@ -278,6 +277,13 @@ describe('extractPaint79Data', () => {
     expect(extractPaint79Data(embedPaint79Data(makePng(), wrongSize))).toEqual({
       status: 'corrupted',
     });
+  });
+
+  test('背景色が空文字列の場合は壊れているとはみなさず、背景色を null として復元する', () => {
+    const data = { ...sampleData(), background: '' };
+    const result = extractPaint79Data(embedPaint79Data(makePng(), data));
+    expect(result.status).toBe('restored');
+    if (result.status === 'restored') expect(result.data.background).toBeNull();
   });
 
   test('activeLayerId が存在しないレイヤーを指す場合は、最前面のレイヤーをアクティブにする', () => {
