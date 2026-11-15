@@ -10,7 +10,7 @@
 | [api.md](api.md) | `Paint79` クラスの公開 API(コンストラクタ、オプション、メソッド、イベント) |
 | [file-format.md](file-format.md) | 保存形式 Paint79 PNG のデータ形式 |
 | [integration.md](integration.md) | Paint79 PNG を保存・表示するアプリケーションの開発者向けの要件と実装例 |
-| [psd.md](psd.md) | PSD 形式での書き出し |
+| [psd.md](psd.md) | PSD 形式での書き出しと読み込み |
 
 ## 仕様の変更手順
 
