@@ -18,7 +18,7 @@
 | ビット深度 | 8 bit / チャンネル |
 | 圧縮 | レイヤー画像、統合画像とも PackBits(RLE) |
 | ピクセルサイズ | `max(1, round(width × pixelRatio))` × `max(1, round(height × pixelRatio))`(完成イメージと同じ) |
-| 解像度 | 72 × `pixelRatio` ppi(Image Resource 1005) |
+| 解像度 | 72 × `pixelRatio` ppi(Image Resource 1005)。PSD で表せる 1/65536〜32,767 ppi の範囲を超える場合は、その範囲に収める |
 | カラープロファイル | sRGB の ICC プロファイルを埋め込む(Image Resource 1039) |
 
 canvas の色は sRGB として扱われるため、sRGB のプロファイルを埋め込みます。プロファイルがない PSD を開くと、外部アプリケーションは作業用の色空間(Adobe RGB など)として解釈し、色がずれることがあるためです。
