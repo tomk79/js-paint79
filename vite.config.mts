@@ -12,6 +12,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         exports: 'default',
+        // 組み込んだライブラリのライセンス表示の所在を示す。banner は UMD 版の圧縮で消えるため、
+        // 圧縮の後に付ける postBanner を使う
+        postBanner:
+          '/*! @tomk79/paint79 | MIT License | includes ag-psd (MIT), pako (MIT AND Zlib), base64-js (MIT). See THIRD-PARTY-NOTICES.txt */',
       },
     },
   },

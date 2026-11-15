@@ -26,5 +26,20 @@ for (const [name, path] of [
       return { type: blob.type, signature: String.fromCharCode(...head) };
     });
     expect(psd).toEqual({ type: 'image/vnd.adobe.photoshop', signature: '8BPS' });
+    // 同梱した ag-psd で PSD を読み込める
+    const opened = await page.evaluate(async () =>
+      window.paint79.open(await window.paint79.exportPSD()),
+    );
+    expect(opened).toEqual({ restored: true });
   });
 }
+
+test('同梱したライブラリのライセンス表示を、ビルド成果物に含める', async ({ request }) => {
+  const notices = await (await request.get('/dist/THIRD-PARTY-NOTICES.txt')).text();
+  for (const name of ['ag-psd', 'pako', 'base64-js']) expect(notices).toContain(name);
+  expect(notices).toContain('Permission is hereby granted'); // MIT ライセンスの本文
+  for (const file of ['/dist/paint79.mjs', '/dist/paint79.js']) {
+    const head = (await (await request.get(file)).text()).slice(0, 300);
+    expect(head).toContain('THIRD-PARTY-NOTICES.txt');
+  }
+});

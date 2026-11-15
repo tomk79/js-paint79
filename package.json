@@ -32,7 +32,7 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite --open /demo/",
-    "build": "vite build && tsc -p tsconfig.build.json && node scripts/write-dts-entry.mjs",
+    "build": "vite build && tsc -p tsconfig.build.json && node scripts/write-dts-entry.mjs && node scripts/write-third-party-notices.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
