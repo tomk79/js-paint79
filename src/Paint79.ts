@@ -8,6 +8,13 @@ import {
   pixelSize,
   type Paint79Data,
 } from './format/paint79-chunk';
+import {
+  decodePsdComposite,
+  decodePsdLayers,
+  isPsd,
+  readPsdStructure,
+  type DecodedPsd,
+} from './format/psd/decode';
 import { assertPsdSize, encodePsd, type PsdLayer } from './format/psd/encode';
 import {
   decidePointerDown,
@@ -174,6 +181,21 @@ function taintsCanvas(image: Drawable): boolean {
  * ブラウザがその大きさの canvas を作成・描画できない場合は Error を投げる。
  */
 function surfaceFrom(image: Drawable, width: number, height: number, stretch: boolean): Surface {
+  return drawableSurface(width, height, (ctx) => {
+    if (stretch) ctx.drawImage(image, 0, 0, width, height);
+    else ctx.drawImage(image, 0, 0);
+  });
+}
+
+/**
+ * 指定した大きさの canvas を作り、draw で描画する。
+ * ブラウザがその大きさの canvas を作成・描画できない場合は Error を投げる。
+ */
+function drawableSurface(
+  width: number,
+  height: number,
+  draw: (ctx: CanvasRenderingContext2D) => void,
+): Surface {
   const surface = createSurface(width, height);
   try {
     const ctx = context(surface);
@@ -184,8 +206,7 @@ function surfaceFrom(image: Drawable, width: number, height: number, stretch: bo
     if (ctx.getImageData(width - 1, height - 1, 1, 1).data[3] !== 255)
       throw new Error('canvas に描画できません');
     ctx.clearRect(width - 1, height - 1, 1, 1);
-    if (stretch) ctx.drawImage(image, 0, 0, width, height);
-    else ctx.drawImage(image, 0, 0);
+    draw(ctx);
   } catch (e) {
     throw new Error(`この大きさの画像は読み込めません: ${width} x ${height}`, { cause: e });
   }
@@ -193,6 +214,24 @@ function surfaceFrom(image: Drawable, width: number, height: number, stretch: bo
     throw new Error(`この大きさの画像は読み込めません: ${width} x ${height}`);
   }
   return surface;
+}
+
+/** PSD から読み込んだ画素(ドキュメント座標の範囲と RGBA)を、その位置に描画した canvas を作る */
+function rasterSurface(
+  width: number,
+  height: number,
+  raster: { left: number; top: number; width: number; height: number; rgba: Uint8ClampedArray },
+): Surface {
+  return drawableSurface(width, height, (ctx) => {
+    if (raster.width === 0 || raster.height === 0) return;
+    // putImageData は合成せずに画素を置き換え、キャンバスの外にはみ出した部分は切り捨てる
+    const image = new ImageData(
+      raster.rgba as Uint8ClampedArray<ArrayBuffer>,
+      raster.width,
+      raster.height,
+    );
+    ctx.putImageData(image, raster.left, raster.top);
+  });
 }
 
 export default class Paint79 {
@@ -592,6 +631,7 @@ export default class Paint79 {
         ? false
         : validateBoolean(options.ignoreMismatch, 'ignoreMismatch');
     const bytes = await toBytes(source);
+    if (isPsd(bytes)) return this.#openPsd(bytes);
     const extracted = extractPaint79Data(bytes, { ignoreMismatch });
     const pr = this.#opts.pixelRatio;
 
@@ -879,6 +919,74 @@ export default class Paint79 {
       bitmap.close();
     }
     return surfaces;
+  }
+
+  /**
+   * PSD を開く(docs/specs/psd.md の「読み込み」)。状態を変更する前に、すべてのレイヤーの canvas を作り終える。
+   * ag-psd の解析は同期処理なので、途中で destroy() されることはない
+   */
+  #openPsd(bytes: Uint8Array): OpenResult {
+    // バイト列を読み出している間に destroy() されていないか
+    this.#alive();
+    const pr = this.#opts.pixelRatio;
+    let structure: ReturnType<typeof readPsdStructure>;
+    try {
+      structure = readPsdStructure(bytes);
+    } catch (e) {
+      throw new Error('PSD を読み込めません', { cause: e });
+    }
+    const width = structure.width / pr;
+    const height = structure.height / pr;
+    // 画像を展開する前に、確保するピクセル数を確かめる(レイヤーがなければ統合画像の 1 枚)
+    const layerCount = Math.max(1, structure.layerCount);
+    if (exceedsOpenPixelLimit({ width, height, pixelRatio: pr, layers: layerCount })) {
+      throw new Error(
+        `レイヤーのピクセル数の合計が上限(${MAX_OPEN_PIXELS})を超えるため、読み込めません`,
+      );
+    }
+    const [pw, ph] = this.#pixelSize(width, height);
+
+    let reason: OpenResult['reason'] = 'no-data';
+    if (structure.layerCount > 0) {
+      let decoded: DecodedPsd | null = null;
+      try {
+        decoded = decodePsdLayers(bytes);
+      } catch {
+        reason = 'corrupted';
+      }
+      if (decoded) {
+        const surfaces = decoded.layers.map((l) => rasterSurface(pw, ph, l));
+        this.#cancelStroke();
+        this.#opts.width = width;
+        this.#opts.height = height;
+        // PSD には背景色がないため、PSD の透明部分をそのまま再現する
+        this.#opts.background = null;
+        const layers = decoded.layers.map((l, i) =>
+          this.#layers.create(surfaces[i]!, pickProps(l)),
+        );
+        // アクティブレイヤーを特定できない場合は最前面
+        const active = layers[decoded.activeIndex ?? layers.length - 1]!;
+        this.#layers.replaceAll(layers, active.id);
+        this.#afterOpen();
+        return { restored: true };
+      }
+    }
+
+    let composite: ReturnType<typeof decodePsdComposite>;
+    try {
+      composite = decodePsdComposite(bytes);
+    } catch (e) {
+      throw new Error('PSD を読み込めません', { cause: e });
+    }
+    if (!composite) throw new Error('PSD に統合画像がないため、読み込めません');
+    const surface = rasterSurface(pw, ph, { left: 0, top: 0, ...composite });
+    this.#cancelStroke();
+    this.#opts.width = width;
+    this.#opts.height = height;
+    const layer = this.#layers.create(surface, { name: 'レイヤー 1' });
+    this.#layers.replaceAll([layer], layer.id);
+    this.#afterOpen();
+    return { restored: false, reason };
   }
 
   #afterOpen(): void {
