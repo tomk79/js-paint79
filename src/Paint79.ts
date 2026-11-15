@@ -8,6 +8,7 @@ import {
   pixelSize,
   type Paint79Data,
 } from './format/paint79-chunk';
+import { assertPsdSize, encodePsd, type PsdLayer } from './format/psd/encode';
 import {
   decidePointerDown,
   decidePointerMove,
@@ -545,6 +546,43 @@ export default class Paint79 {
       layers: layerProps.map((props, i) => ({ ...props, image: images[i]! })),
     });
     return new Blob([png], { type: 'image/png' });
+  }
+
+  async exportPSD(): Promise<Blob> {
+    this.#alive();
+    const [width, height] = this.#pixelSize(this.#opts.width, this.#opts.height);
+    // 画素を読み出す前に確かめ、書き出せない大きさのときに無駄なメモリを確保しない
+    assertPsdSize(width, height);
+    // 画素は getImageData で同期的に読み出すので、書き出す内容は呼び出した時点で確定する
+    const pixels = (s: HTMLCanvasElement) => context(s).getImageData(0, 0, s.width, s.height).data;
+    const layers = this.#committedLayers();
+    const psdLayers: PsdLayer[] = layers.map((l) => ({ ...pickProps(l), rgba: pixels(l.surface) }));
+    const background = this.#opts.background;
+    if (background !== null) {
+      // PSD にはレイヤーではない背景色がないため、最背面のレイヤーとして表す(docs/specs/psd.md)
+      const surface = createSurface(width, height);
+      const ctx = context(surface);
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+      psdLayers.unshift({
+        name: '背景',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        locked: false,
+        rgba: pixels(surface),
+      });
+    }
+    const active = layers.findIndex((l) => l.id === this.#layers.activeId);
+    const bytes = encodePsd({
+      width,
+      height,
+      dpi: 72 * this.#opts.pixelRatio,
+      activeIndex: active + (background !== null ? 1 : 0),
+      layers: psdLayers,
+      composite: pixels(this.#committedComposite(layers)),
+    });
+    return new Blob([bytes], { type: 'image/vnd.adobe.photoshop' });
   }
 
   async open(source: ImageSource, options?: OpenOptions): Promise<OpenResult> {

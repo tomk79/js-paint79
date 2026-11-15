@@ -20,5 +20,11 @@ for (const [name, path] of [
       return (window.paint79.constructor as typeof window.Paint79).hasData(blob);
     });
     expect(hasData).toBe(true);
+    const psd = await page.evaluate(async () => {
+      const blob = await window.paint79.exportPSD();
+      const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      return { type: blob.type, signature: String.fromCharCode(...head) };
+    });
+    expect(psd).toEqual({ type: 'image/vnd.adobe.photoshop', signature: '8BPS' });
   });
 }

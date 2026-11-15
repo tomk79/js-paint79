@@ -244,7 +244,7 @@ export function assertPsdSize(width: number, height: number): void {
   }
 }
 
-export function encodePsd(doc: PsdDocument): Uint8Array {
+export function encodePsd(doc: PsdDocument): Uint8Array<ArrayBuffer> {
   assertPsdSize(doc.width, doc.height);
   const globalAlpha = hasTransparency(doc.composite);
   const channels = globalAlpha ? [0, 1, 2, 3] : [0, 1, 2];

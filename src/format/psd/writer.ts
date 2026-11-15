@@ -73,7 +73,7 @@ export class ByteWriter {
     this.#view.setUint32(at, length);
   }
 
-  result(): Uint8Array {
+  result(): Uint8Array<ArrayBuffer> {
     return this.#buf.slice(0, this.offset);
   }
 }
