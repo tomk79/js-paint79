@@ -102,6 +102,7 @@ new Paint79(container, options);
 | メソッド | 戻り値 | 説明 |
 | --- | --- | --- |
 | `exportPNG(options?)` | `Promise<Blob>` | Paint79 PNG を書き出す。`options.embedData` に `false` を指定すると、レイヤー情報を含まない完成イメージのみの PNG を書き出す |
+| `exportPSD()` | `Promise<Blob>` | ドキュメントを PSD 形式で書き出す。MIME タイプは `image/vnd.adobe.photoshop`(詳細は [PSD の書き出し](psd.md)) |
 | `open(source, options?)` | `Promise<OpenResult>` | 画像を開き、キャンバスの状態を置き換える。読み込み後、履歴は破棄される(詳細は後述) |
 | `toDataURL(type?, quality?)` | `string` | 完成イメージを Data URL として書き出す。引数は `HTMLCanvasElement.toDataURL()` と同じ |
 | `toBlob(type?, quality?)` | `Promise<Blob>` | 完成イメージを Blob として書き出す |
@@ -234,8 +235,8 @@ paint79.on('layerchange', (event) => {
 
 ### 保存・読み込み
 
-- **書き出す内容**: `exportPNG()`、`toBlob()` が書き出す内容(画像、レイヤーの属性、背景色、アクティブレイヤー等)は、呼び出した時点の状態です。Promise が解決するまでの間にドキュメントを変更しても、出力には影響しません
-- **書き出しと描画中のストローク**: `exportPNG()`、`toBlob()`、`toDataURL()` の出力には、描画中の(まだ描き終えていない)ストロークを含めません。出力は、そのストロークを描き始める前の状態になります。描き終えていないストロークは、`pointercancel` 等で取り消される可能性があり、履歴にない内容が保存されることを防ぐためです。画面の表示には、描画中のストロークも含まれます
+- **書き出す内容**: `exportPNG()`、`exportPSD()`、`toBlob()` が書き出す内容(画像、レイヤーの属性、背景色、アクティブレイヤー等)は、呼び出した時点の状態です。Promise が解決するまでの間にドキュメントを変更しても、出力には影響しません
+- **書き出しと描画中のストローク**: `exportPNG()`、`exportPSD()`、`toBlob()`、`toDataURL()` の出力には、描画中の(まだ描き終えていない)ストロークを含めません。出力は、そのストロークを描き始める前の状態になります。描き終えていないストロークは、`pointercancel` 等で取り消される可能性があり、履歴にない内容が保存されることを防ぐためです。画面の表示には、描画中のストロークも含まれます
 - **`open()`**:
   - Paint79 PNG からレイヤーを復元した場合は、キャンバスサイズ、背景色、レイヤー、アクティブレイヤーを復元します。インスタンスの `pixelRatio` は変更しません
   - レイヤーを復元しなかった場合は、画像を `'レイヤー 1'` という名前の 1 枚のレイヤーとして読み込みます。背景色は変更しません

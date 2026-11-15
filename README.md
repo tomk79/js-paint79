@@ -10,6 +10,7 @@
 - ペンの筆圧(`pressure`)に応じて線の太さを変化させられます
 - レイヤーに対応します(追加・削除・並べ替え・表示切替・不透明度・合成モード)
 - **レイヤー情報を埋め込んだ PNG** を保存形式とします。通常の画像ビューアでは全レイヤーを統合した完成イメージとして表示され、Paint79 で開くとレイヤーを保持したまま編集を再開できます
+- Photoshop などの外部アプリケーション向けに、レイヤーを保持した **PSD を書き出せます**
 - 高解像度ディスプレイ(`devicePixelRatio`)に対応します
 - アンドゥ/リドゥ、消しゴムに対応します
 - 依存ライブラリはありません
@@ -97,7 +98,7 @@ import Paint79 from '@tomk79/paint79';
 | ツール・描画設定 | `setTool()`, `setColor()`, `setLineWidth()` |
 | レイヤー | `getLayers()`, `addLayer()`, `removeLayer()`, `moveLayer()`, `mergeDown()`, `setLayerProperties()`, `setActiveLayer()` |
 | 履歴 | `undo()`, `redo()`, `canUndo()`, `canRedo()` |
-| 保存・読み込み | `exportPNG()`, `open()`, `toBlob()`, `toDataURL()`, `loadImage()` |
+| 保存・読み込み | `exportPNG()`, `exportPSD()`, `open()`, `toBlob()`, `toDataURL()`, `loadImage()` |
 | イベント | `on()`, `off()` |
 | 破棄 | `destroy()` |
 
@@ -128,6 +129,19 @@ Paint79 PNG を保存・表示するアプリケーションでは、**ファイ
 > **チャンク名の 2 文字目が小文字(非公開)、かつ 4 文字目が大文字(コピー不可)であるチャンクを、1 つ以上含む PNG**
 
 判定方法の詳細、実装例(JavaScript / PHP)、ファイルサイズ上限の扱い、アプリケーションへの組み込み方は [画像を扱うアプリケーションとの連携](docs/specs/integration.md) を参照してください。
+
+## PSD への書き出し
+
+`exportPSD()` で、レイヤーを保持した PSD を書き出せます。Photoshop などの外部アプリケーションで、レイヤーを保ったまま編集を続けられます。
+
+```js
+const psd = await paint79.exportPSD(); // MIME タイプは image/vnd.adobe.photoshop
+```
+
+- レイヤーの名前・表示・不透明度・合成モード・ロックが反映されます。背景色は、最背面の「背景」レイヤーになります
+- PSD は外部アプリケーションとの受け渡し用です。Paint79 で編集を再開するための保存には、Paint79 PNG を使ってください(PSD は `open()` で読み込めません)
+
+詳細は [PSD の書き出し](docs/specs/psd.md) を参照してください。
 
 ## ドキュメント
 
