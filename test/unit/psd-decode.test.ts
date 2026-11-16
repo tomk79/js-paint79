@@ -341,6 +341,18 @@ describe('壊れた PSD', () => {
     expect(Array.from(decodePsdComposite(bytes)!.rgba.subarray(0, 4))).toEqual([0, 0, 0, 255]);
   });
 
+  test('統合画像が ZIP で圧縮されている場合は、統合画像を読めない', () => {
+    const bytes = simplePsd(4, 3, 0).slice();
+    const view = new DataView(bytes.buffer);
+    let p = 26; // ヘッダー
+    p += 4 + view.getUint32(p); // カラーモードデータ
+    p += 4 + view.getUint32(p); // Image Resources
+    p += 4 + view.getUint32(p); // レイヤーとマスクの情報
+    view.setUint16(p, 2); // 統合画像の圧縮方式を ZIP(予測なし)に
+    expect(readPsdStructure(bytes).layerCount).toBe(0);
+    expect(() => decodePsdComposite(bytes)).toThrow();
+  });
+
   test('対応しないカラーモード(Lab)は、構造の読み込みで例外', () => {
     const bytes = simplePsd(4, 3, 1).slice();
     bytes[25] = 9; // カラーモード(ヘッダーの最後の 2 バイト)を Lab に
