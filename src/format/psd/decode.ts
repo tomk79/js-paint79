@@ -10,7 +10,15 @@ import {
 } from 'ag-psd';
 import { MAX_OPEN_PIXELS } from '../../model/limits';
 import type { BlendMode } from '../paint79-chunk';
-import { applyMask, flattenLayers, isLocked, to8bit, toBlendMode, type PsdMask } from './convert';
+import {
+  applyMask,
+  flattenLayers,
+  isLocked,
+  maskTo8bit,
+  to8bit,
+  toBlendMode,
+  type PsdMask,
+} from './convert';
 
 const SIGNATURE = [0x38, 0x42, 0x50, 0x53]; // '8BPS'
 
@@ -123,7 +131,7 @@ function toPsdMask(mask: LayerMaskData): PsdMask {
     top,
     width: sized ? width : 0,
     height: sized ? height : 0,
-    data: sized ? to8bit(image.data) : new Uint8ClampedArray(0),
+    data: sized ? maskTo8bit(image.data) : new Uint8ClampedArray(0),
     defaultColor: mask.defaultColor ?? 0,
   };
 }

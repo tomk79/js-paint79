@@ -3,6 +3,7 @@ import {
   applyMask,
   flattenLayers,
   isLocked,
+  maskTo8bit,
   to8bit,
   toBlendMode,
   type PsdTreeNode,
@@ -52,6 +53,19 @@ describe('to8bit', () => {
     const data = new Float32Array([0, 0.5, 1.5, 0.5]);
     // 0.5 ^ (1 / 2.2) × 255 = 186.0…、1.5 は 1 に切り詰める
     expect(Array.from(to8bit(data))).toEqual([0, 186, 255, 128]);
+  });
+});
+
+describe('maskTo8bit', () => {
+  test('32 bit のマスクの値は、ガンマを適用せずに 255 倍する', () => {
+    // マスクは透明度として使うため、0.5 は 186 ではなく 128 になる
+    const data = new Float32Array([0.5, 0.5, 0.5, 1, 1.5, -1, 0.25, 1]);
+    expect(Array.from(maskTo8bit(data))).toEqual([128, 128, 128, 255, 255, 0, 64, 255]);
+  });
+
+  test('16 bit のマスクの値は、色と同じく 257 で割って丸める', () => {
+    const data = new Uint16Array([257 * 128, 257 * 128, 257 * 128, 65535]);
+    expect(Array.from(maskTo8bit(data))).toEqual([128, 128, 128, 255]);
   });
 });
 

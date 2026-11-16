@@ -252,6 +252,32 @@ describe('decodePsdLayers', () => {
     expect(pixelAt(decodePsdLayers(bytes).layers[0]!, 1, 1)).toEqual([255, 128, 0, 255]);
   });
 
+  test('32 bit の PSD のマスクは、ガンマを適用せずに透明度に掛け合わせる', () => {
+    const color = new Float32Array(2 * 2 * 4);
+    for (let i = 0; i < color.length; i += 4) color.set([1, 0, 0, 1], i);
+    const mask = new Float32Array(2 * 2 * 4);
+    for (let i = 0; i < mask.length; i += 4) mask.set([0.5, 0.5, 0.5, 1], i);
+    const bytes = writePsdBytes({
+      width: 2,
+      height: 2,
+      bitsPerChannel: 32,
+      children: [
+        {
+          name: 'A',
+          imageData: { width: 2, height: 2, data: color } as never,
+          mask: {
+            top: 0,
+            left: 0,
+            bottom: 2,
+            right: 2,
+            imageData: { width: 2, height: 2, data: mask } as never,
+          },
+        },
+      ],
+    });
+    expect(pixelAt(decodePsdLayers(bytes).layers[0]!, 1, 1)).toEqual([255, 0, 0, 128]);
+  });
+
   test('グレースケールの PSD は、R・G・B を同じ値にして読み込む', () => {
     const bytes = writePsdBytes({
       width: 2,

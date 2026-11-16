@@ -45,6 +45,19 @@ export function to8bit(data: PsdPixelArray): Uint8ClampedArray {
   return out;
 }
 
+/**
+ * レイヤーマスクの画素の配列を、8 bit にする。マスクの値は透明度として掛け合わせるため、
+ * 32 bit でも色のようなガンマは適用せず、透明度と同じく 255 倍する
+ */
+export function maskTo8bit(data: PsdPixelArray): Uint8ClampedArray {
+  if (!(data instanceof Float32Array)) return to8bit(data);
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = Math.round(Math.min(1, Math.max(0, data[i]!)) * 255);
+  }
+  return out;
+}
+
 /** ドキュメント座標の矩形と、その範囲の 8 bit RGBA */
 export interface PsdRaster {
   left: number;
