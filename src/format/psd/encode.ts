@@ -244,8 +244,24 @@ export function assertPsdSize(width: number, height: number): void {
   }
 }
 
+/**
+ * PSD で記録できるレイヤー数の上限。レイヤー数は符号付き 16 bit で記録し、統合画像が透明度を持つことを
+ * 負の値で示すため、正負どちらでも表せる 32,767 を上限とする
+ */
+export const MAX_PSD_LAYERS = 32767;
+
+/** レイヤー数を PSD に記録できることを確かめる。超えた値を書くと、以降のレコードが読めなくなる */
+export function assertPsdLayerCount(count: number): void {
+  if (count > MAX_PSD_LAYERS) {
+    throw new Error(
+      `PSD に記録できるレイヤーは ${MAX_PSD_LAYERS} 枚までのため、書き出せません(${count} 枚)`,
+    );
+  }
+}
+
 export function encodePsd(doc: PsdDocument): Uint8Array<ArrayBuffer> {
   assertPsdSize(doc.width, doc.height);
+  assertPsdLayerCount(doc.layers.length);
   const globalAlpha = hasTransparency(doc.composite);
   const channels = globalAlpha ? [0, 1, 2, 3] : [0, 1, 2];
   const w = new ByteWriter();

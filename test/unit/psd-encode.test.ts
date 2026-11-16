@@ -236,6 +236,32 @@ describe('encodePsd', () => {
       expect(() => encodePsd(doc({ width: 30001, height: 1, composite }))).toThrow(RangeError);
     });
 
+    describe('レイヤー数', () => {
+      const many = (count: number) =>
+        doc({
+          width: 1,
+          height: 1,
+          composite: solid(1, 1, [0, 0, 0, 0]),
+          layers: Array.from({ length: count }, () => layer({ rgba: new Uint8ClampedArray(4) })),
+        });
+
+      test('32,767 枚までは書き出せる', () => {
+        // 統合画像が透明度を持つので、レイヤー数は負の値で記録される
+        expect(rawLayerCount(encodePsd(many(32767)))).toBe(-32767);
+      });
+
+      test('32,767 枚を超える場合は、符号付き 16 bit で記録できないため Error', () => {
+        let error: unknown;
+        try {
+          encodePsd(many(32768));
+        } catch (e) {
+          error = e;
+        }
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(RangeError);
+      });
+    });
+
     test('セクションの長さが 32 bit で表せない場合は Error', () => {
       expect(() => assertSectionLength(0xffffffff)).not.toThrow();
       let error: unknown;
