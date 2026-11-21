@@ -1,7 +1,7 @@
 // レイヤーの画像(canvas)と、表示用 canvas への合成(DOM 依存)
-import type { PixelRect } from '../input/policy';
-import type { Layer } from '../model/LayerStack';
-import { compositeOperation } from './blend';
+import type { PixelRect } from '../input/policy.js';
+import type { Layer } from '../model/LayerStack.js';
+import { compositeOperation } from './blend.js';
 
 export type Surface = HTMLCanvasElement;
 

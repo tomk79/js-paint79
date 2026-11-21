@@ -1,21 +1,21 @@
 // Paint79 の公開クラス。各モジュールを組み合わせる薄い層に保つ。
 // 仕様: docs/specs/api.md
-import { Emitter } from './events/Emitter';
+import { Emitter } from './events/Emitter.js';
 import {
   embedPaint79Data,
   extractPaint79Data,
   hasPaint79Data,
   pixelSize,
   type Paint79Data,
-} from './format/paint79-chunk';
+} from './format/paint79-chunk.js';
 import {
   decodePsdComposite,
   decodePsdLayers,
   isPsd,
   readPsdStructure,
   type DecodedPsd,
-} from './format/psd/decode';
-import { assertPsdSize, encodePsd, type PsdLayer } from './format/psd/encode';
+} from './format/psd/decode.js';
+import { assertPsdSize, encodePsd, type PsdLayer } from './format/psd/encode.js';
 import {
   decidePointerDown,
   decidePointerMove,
@@ -24,10 +24,10 @@ import {
   toCanvasPoint,
   type ClientRectLike,
   type StrokePoint,
-} from './input/policy';
-import { History } from './model/History';
-import { exceedsOpenPixelLimit, MAX_OPEN_PIXELS } from './model/limits';
-import { LayerStack, toInfo, type Layer } from './model/LayerStack';
+} from './input/policy.js';
+import { History } from './model/History.js';
+import { exceedsOpenPixelLimit, MAX_OPEN_PIXELS } from './model/limits.js';
+import { LayerStack, toInfo, type Layer } from './model/LayerStack.js';
 import {
   normalizeOptions,
   validateBackground,
@@ -41,9 +41,9 @@ import {
   type LayerProps,
   type PointerType,
   type ResolvedOptions,
-} from './model/options';
-import { assertCssColor, isCssColor } from './render/color';
-import { drawDot, drawSegment, type StrokeStyle } from './render/stroke';
+} from './model/options.js';
+import { assertCssColor, isCssColor } from './render/color.js';
+import { drawDot, drawSegment, type StrokeStyle } from './render/stroke.js';
 import {
   canvasToBlob,
   clearSurface,
@@ -56,7 +56,7 @@ import {
   restoreAll,
   restoreRect,
   type Surface,
-} from './render/surface';
+} from './render/surface.js';
 import type {
   AddLayerOptions,
   ExportPNGOptions,
@@ -71,7 +71,7 @@ import type {
   Paint79EventName,
   Paint79Options,
   Tool,
-} from './types';
+} from './types.js';
 
 const EVENT_NAMES: readonly Paint79EventName[] = [
   'strokestart',

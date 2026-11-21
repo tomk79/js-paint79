@@ -1,7 +1,7 @@
 // レイヤーの構成とアクティブレイヤーを管理する(DOM 非依存)
 // レイヤーの画像(S)は、このクラスでは中身を扱わない不透明な値として保持する。
 // 仕様: docs/specs/document-model.md、docs/specs/api.md の「レイヤー」
-import type { LayerProps } from './options';
+import type { LayerProps } from './options.js';
 
 export interface Layer<S> extends LayerProps {
   readonly id: string;

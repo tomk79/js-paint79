@@ -1,6 +1,6 @@
 // PNG のチャンク構造を扱うユーティリティ(DOM 非依存)
 // 仕様: https://www.w3.org/TR/png-3/
-import { crc32 } from './crc32';
+import { crc32 } from './crc32.js';
 
 export const PNG_SIGNATURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

@@ -1,6 +1,6 @@
 // オプションと引数の検証(DOM 非依存)
 // 仕様: docs/specs/api.md の「オプション」「引数の検証」
-import { BLEND_MODES, type BlendMode } from '../format/paint79-chunk';
+import { BLEND_MODES, type BlendMode } from '../format/paint79-chunk.js';
 
 export const TOOLS = ['pen', 'eraser'] as const;
 export type Tool = (typeof TOOLS)[number];

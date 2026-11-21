@@ -21,9 +21,14 @@
   "types": "./dist/paint79.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/paint79.d.ts",
-      "import": "./dist/paint79.mjs",
-      "require": "./dist/paint79.js"
+      "import": {
+        "types": "./dist/paint79.d.mts",
+        "default": "./dist/paint79.mjs"
+      },
+      "require": {
+        "types": "./dist/paint79.d.ts",
+        "default": "./dist/paint79.js"
+      }
     }
   },
   "files": [

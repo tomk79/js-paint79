@@ -1,10 +1,10 @@
 // PSD の書き出し(DOM 非依存)
 // 仕様: docs/specs/psd.md
-import type { BlendMode } from '../paint79-chunk';
-import { opaqueBounds, type PsdBounds } from './bounds';
-import { packBits } from './packbits';
-import { srgbIccProfile } from './srgb-icc';
-import { assertSectionLength, ByteWriter } from './writer';
+import type { BlendMode } from '../paint79-chunk.js';
+import { opaqueBounds, type PsdBounds } from './bounds.js';
+import { packBits } from './packbits.js';
+import { srgbIccProfile } from './srgb-icc.js';
+import { assertSectionLength, ByteWriter } from './writer.js';
 
 export interface PsdLayer {
   name: string;

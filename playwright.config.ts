@@ -15,23 +15,23 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: /dist\.spec\.ts/,
+      testIgnore: /dist(-types)?\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
-      testIgnore: /dist\.spec\.ts/,
+      testIgnore: /dist(-types)?\.spec\.ts/,
       use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
-      testIgnore: /dist\.spec\.ts/,
+      testIgnore: /dist(-types)?\.spec\.ts/,
       use: { ...devices['Desktop Safari'] },
     },
     {
       // ビルド成果物のスモークテスト
       name: 'dist',
-      testMatch: /dist\.spec\.ts/,
+      testMatch: /dist(-types)?\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
   ],

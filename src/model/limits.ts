@@ -1,6 +1,6 @@
 // 読み込み時の上限(DOM 非依存)
 // 仕様: docs/specs/api.md の「保存・読み込み」
-import { pixelSize } from '../format/paint79-chunk';
+import { pixelSize } from '../format/paint79-chunk.js';
 
 /** open() でレイヤーを復元するときに確保するピクセル数の合計の上限(16384 x 16384) */
 export const MAX_OPEN_PIXELS = 16384 * 16384;

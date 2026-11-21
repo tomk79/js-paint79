@@ -1,7 +1,7 @@
 // ストロークの描画(DOM 依存)
-import type { StrokePoint } from '../input/policy';
-import type { Tool } from '../model/options';
-import { context, type Surface } from './surface';
+import type { StrokePoint } from '../input/policy.js';
+import type { Tool } from '../model/options.js';
+import { context, type Surface } from './surface.js';
 
 export interface StrokeStyle {
   tool: Tool;

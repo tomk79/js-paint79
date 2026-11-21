@@ -8,8 +8,8 @@ import {
   type Psd,
   type ReadOptions,
 } from 'ag-psd';
-import { MAX_OPEN_PIXELS } from '../../model/limits';
-import type { BlendMode } from '../paint79-chunk';
+import { MAX_OPEN_PIXELS } from '../../model/limits.js';
+import type { BlendMode } from '../paint79-chunk.js';
 import {
   applyMask,
   flattenLayers,
@@ -18,7 +18,7 @@ import {
   to8bit,
   toBlendMode,
   type PsdMask,
-} from './convert';
+} from './convert.js';
 
 const SIGNATURE = [0x38, 0x42, 0x50, 0x53]; // '8BPS'
 

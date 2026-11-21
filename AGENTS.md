@@ -33,7 +33,10 @@
 | --- | --- | --- |
 | `dist/paint79.mjs` | ES Modules | `import Paint79 from '@tomk79/paint79'` |
 | `dist/paint79.js` | UMD | `<script>` タグで読み込み、グローバル変数 `Paint79` として利用 |
-| `dist/paint79.d.ts` | 型定義 | TypeScript 利用者向け(実体は `dist/types/` 以下) |
+| `dist/paint79.d.mts` | 型定義(ESM) | `import` で利用する TypeScript 利用者向け(実体は `dist/types/esm/` 以下) |
+| `dist/paint79.d.ts` | 型定義(CommonJS) | `require()` で利用する TypeScript 利用者向け。`export =` でクラスを公開する(実体は `dist/types/cjs/` 以下) |
+
+型定義は、tsc の出力から `scripts/write-dts-entry.mjs` で生成します。利用者の `moduleResolution`(`bundler` / `node16` / `nodenext`)と ESM / CommonJS の組み合わせごとに型チェックが通ることを、E2E の `dist` プロジェクト(`e2e/dist-types.spec.ts`)で検証します。
 
 ### 依存関係
 
@@ -169,6 +172,7 @@ Paint79 PNG は、memon 等の外部アプリケーションにファイルと�
 
 - TypeScript の `strict` を有効にし、`any` を使用しないでください。やむを得ない場合は理由をコメントに残してください
 - フォーマットは Prettier に従います。手動で整形ルールを議論しないでください
+- `src/` の相対パスの import には、拡張子 `.js` を付けてください(例: `import Paint79 from './Paint79.js'`)。出力した型定義を ESM として解釈する `moduleResolution: node16` / `nodenext` では、拡張子のない相対パスを解決できないためです
 - 公開メソッドは引数を検証し、不正な値には `TypeError` または `RangeError` を、理由がわかるメッセージとともに投げてください
 - `destroy()` で、登録したすべてのイベントリスナー、生成した DOM 要素、タイマー等を確実に解放してください
 - コメントは日本語で書きます。コードを読めばわかることではなく、「なぜそうしているか」を書いてください

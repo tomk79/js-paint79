@@ -1,6 +1,6 @@
 // PSD の読み込みで使う変換(DOM 非依存、ag-psd に依存しない純粋関数)
 // 仕様: docs/specs/psd.md の「読み込み」
-import { BLEND_MODES, type BlendMode } from '../paint79-chunk';
+import { BLEND_MODES, type BlendMode } from '../paint79-chunk.js';
 
 /**
  * ag-psd が返す描画モードの名前を、合成モードにする。

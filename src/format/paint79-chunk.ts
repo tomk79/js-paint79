@@ -8,7 +8,7 @@ import {
   readChunks,
   readImageSize,
   type PngChunk,
-} from './png';
+} from './png.js';
 
 export const CHUNK_TYPE = 'paNT';
 export const FORMAT_VERSION = 1;

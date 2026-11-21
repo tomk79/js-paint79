@@ -1,11 +1,11 @@
 // 公開 API の型(docs/specs/api.md)
-import type { BlendMode } from './format/paint79-chunk';
-import type { PointerType, Tool } from './model/options';
-import type { LayerInfo } from './model/LayerStack';
+import type { BlendMode } from './format/paint79-chunk.js';
+import type { PointerType, Tool } from './model/options.js';
+import type { LayerInfo } from './model/LayerStack.js';
 
-export type { BlendMode } from './format/paint79-chunk';
-export type { Paint79Options, PointerType, Tool } from './model/options';
-export type { LayerInfo } from './model/LayerStack';
+export type { BlendMode } from './format/paint79-chunk.js';
+export type { Paint79Options, PointerType, Tool } from './model/options.js';
+export type { LayerInfo } from './model/LayerStack.js';
 
 export interface AddLayerOptions {
   name?: string;

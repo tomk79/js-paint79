@@ -5,7 +5,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "rootDir": "src",
-    "outDir": "dist/types",
+    "outDir": "dist/types/esm",
     "types": []
   },
   "include": ["src"]

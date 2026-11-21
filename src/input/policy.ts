@@ -1,7 +1,7 @@
 // ポインター入力に関する判断ロジック(DOM 非依存)
 // 仕様: docs/specs/api.md の「ポインター操作による描画」
-import { pixelSize } from '../format/paint79-chunk';
-import { POINTER_TYPES } from '../model/options';
+import { pixelSize } from '../format/paint79-chunk.js';
+import { POINTER_TYPES } from '../model/options.js';
 
 export interface StrokeWidthInput {
   lineWidth: number;
