@@ -1,4 +1,4 @@
-# js-paint79
+# @tomk79/paint79
 
 ブラウザ上に canvas を展開し、マウス・指(タッチ)・ペンデバイスで絵を描くための UI を提供する JavaScript ライブラリです。
 
@@ -27,16 +27,32 @@ npm install @tomk79/paint79
 import Paint79 from '@tomk79/paint79';
 ```
 
-### `<script>` タグ
+Vite や webpack などのバンドラーを使う場合は、上記のように `@tomk79/paint79` から読み込めます。TypeScript の型定義も含まれています。
+
+### CDN から読み込む(バンドラーを使わない場合)
+
+`<script>` タグで読み込むと、グローバル変数 `Paint79` として利用できます。
 
 ```html
-<script src="dist/paint79.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tomk79/paint79@0.1.0/dist/paint79.js"></script>
 <script>
-  // グローバル変数 `Paint79` として利用できます
+  const paint79 = new Paint79(document.getElementById('paint-area'));
 </script>
 ```
 
+ES Modules として読み込む場合は、`dist/paint79.mjs` を指定します。
+
+```html
+<script type="module">
+  import Paint79 from 'https://cdn.jsdelivr.net/npm/@tomk79/paint79@0.1.0/dist/paint79.mjs';
+</script>
+```
+
+URL の `0.1.0` は、利用するバージョンに置き換えてください。CDN から読み込む場合は、jsDelivr のパッケージのページで確認できる SRI ハッシュを `integrity` 属性に指定する(`crossorigin="anonymous"` も併せて指定する)と、配信されるファイルが改ざんされていないことをブラウザに検証させられます。npm でインストールしたファイル(`node_modules/@tomk79/paint79/dist/` 以下)を、自分のサーバーに置いて読み込むこともできます。
+
 ## 基本的な使い方
+
+以下の例は、バンドラーなどで `@tomk79/paint79` を解決できる環境を想定しています。バンドラーを使わない場合は、`import` の読み込み元を [CDN の URL](#cdn-から読み込むバンドラーを使わない場合) に置き換えてください。
 
 ```html
 <div id="paint-area"></div>
@@ -151,6 +167,7 @@ await paint79.open(psdFile); // PSD のレイヤーを読み込む
 | --- | --- |
 | [docs/specs/](docs/specs/README.md) | 仕様の正本 |
 | [docs/examples.md](docs/examples.md) | 使用例 |
+| [CHANGELOG.md](CHANGELOG.md) | 変更履歴 |
 | [AGENTS.md](AGENTS.md) | 開発ルール |
 
 ## 開発

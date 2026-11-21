@@ -2,6 +2,8 @@
 
 本ライブラリはツールバーやレイヤーパネル等のボタン類を含みません。アプリケーション側で自由に UI を作成し、API を呼び出してください。
 
+この例は、バンドラーなどで `@tomk79/paint79` を解決できる環境を想定しています。バンドラーを使わない場合の読み込み方は、[README の「インストール」](../README.md#インストール) を参照してください。
+
 ```html
 <div>
   <button id="btn-pen">ペン</button>
@@ -11,7 +13,7 @@
   <button id="btn-undo" disabled>元に戻す</button>
   <button id="btn-redo" disabled>やり直す</button>
   <button id="btn-save">保存</button>
-  <input id="file-open" type="file" accept="image/png,image/jpeg,image/webp">
+  <input id="file-open" type="file" accept="image/png,image/jpeg,image/webp,image/vnd.adobe.photoshop,.psd">
 </div>
 <div>
   <button id="btn-add-layer">レイヤーを追加</button>
@@ -50,7 +52,8 @@
     URL.revokeObjectURL(a.href);
   });
 
-  // 開く: Paint79 PNG ならレイヤーを復元、それ以外は 1 枚のレイヤーとして読み込む
+  // 開く: Paint79 PNG ならレイヤーを復元、PSD ならレイヤーを 1 枚ずつ読み込み、
+  // それ以外の画像は 1 枚のレイヤーとして読み込む
   document.getElementById('file-open').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
