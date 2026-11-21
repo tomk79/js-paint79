@@ -1,0 +1,44 @@
+import type { AddLayerOptions, ExportPNGOptions, ImageSource, LayerInfo, LayerPropsInput, LoadImageOptions, LoadImageSource, OpenOptions, OpenResult, Paint79EventMap, Paint79EventName, Paint79Options, Tool } from './types.js';
+export default class Paint79 {
+    #private;
+    /** Paint79 のレイヤー情報を含む PNG かどうか(docs/specs/api.md の「静的メソッド」) */
+    static hasData(source: ImageSource): Promise<boolean>;
+    constructor(container: HTMLElement, options?: Paint79Options);
+    setTool(tool: Tool): void;
+    getTool(): Tool;
+    setColor(color: string): void;
+    getColor(): string;
+    setLineWidth(width: number): void;
+    getLineWidth(): number;
+    setReadOnly(flag: boolean): void;
+    getLayers(): LayerInfo[];
+    getLayer(layerId: string): LayerInfo | null;
+    addLayer(options?: AddLayerOptions): string;
+    removeLayer(layerId: string): boolean;
+    duplicateLayer(layerId: string): string;
+    moveLayer(layerId: string, index: number): void;
+    mergeDown(layerId: string): boolean;
+    setLayerProperties(layerId: string, props: LayerPropsInput): void;
+    getActiveLayerId(): string;
+    setActiveLayer(layerId: string): void;
+    clearLayer(layerId?: string): void;
+    undo(): boolean;
+    redo(): boolean;
+    canUndo(): boolean;
+    canRedo(): boolean;
+    clearHistory(): void;
+    clear(): void;
+    resize(width: number, height: number): void;
+    setBackground(color: string | null): void;
+    getBackground(): string | null;
+    getCanvas(): HTMLCanvasElement;
+    exportPNG(options?: ExportPNGOptions): Promise<Blob>;
+    exportPSD(): Promise<Blob>;
+    open(source: ImageSource, options?: OpenOptions): Promise<OpenResult>;
+    toDataURL(type?: string, quality?: number): string;
+    toBlob(type?: string, quality?: number): Promise<Blob>;
+    loadImage(source: LoadImageSource, options?: LoadImageOptions): Promise<string>;
+    on<K extends Paint79EventName>(eventName: K, listener: (event: Paint79EventMap[K]) => void): void;
+    off<K extends Paint79EventName>(eventName: K, listener: (event: Paint79EventMap[K]) => void): void;
+    destroy(): void;
+}
